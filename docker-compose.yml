@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: shelfready-postgres
+    environment:
+      POSTGRES_USER: shelfready
+      POSTGRES_PASSWORD: shelfready
+      POSTGRES_DB: shelfready
+    ports:
+      - "55433:5432"
+    volumes:
+      - shelfready_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shelfready -d shelfready"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  shelfready_pgdata:

@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.next/
+out/
+dist/
+build/
+
+# Env & secrets
+.env
+.env.local
+*.pem
+
+# Storage / runtime
+storage/**
+!storage/.gitkeep
+*.sqlite3
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Test / coverage
+coverage/
+htmlcov/
+.coverage
+playwright-report/
+test-results/
+
+# Locks we generate locally but keep intentional lockfiles
+# (uv.lock and package-lock.json ARE committed)
+
+# Local npm cache used during scaffold
+.npm-cache/

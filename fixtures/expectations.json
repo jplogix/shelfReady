@@ -1,0 +1,25 @@
+{
+  "product_count_min": 18,
+  "scenarios": {
+    "exact_duplicate": {"sku_prefix": "NW-TOTE-001", "note": "Identical fingerprint rows"},
+    "conflicting_sku": {"sku": "NW-TOTE-001", "note": "Conflicting row uses same SKU with different data"},
+    "missing_price": {"sku": "NW-SOCK-004"},
+    "suspicious_price_low": {"sku": "AR-MUG-101"},
+    "suspicious_price_high": {"sku": "AR-LAMP-200"},
+    "negative_stock": {"sku": "AR-LAMP-201"},
+    "zero_stock": {"sku": "NW-CAP-003"},
+    "missing_image": {"sku": "NW-SOCK-004"},
+    "model_worn_first": {"sku": "NW-TOTE-002", "image": "nw-tote-model.png"},
+    "brand_aliases": ["GUCCI", "Gucci Eyewear", "NORTHWIND CO", "AURORA SUPPLY"],
+    "color_aliases": ["BLK/GLD", "Bk-Gd", "Black Gold"],
+    "unsupported_claims": ["GG-SUN-77", "AR-CANDLE-3"],
+    "prompt_injection": {"sku": "GG-SUN-79"},
+    "unknown_brand": {"sku": "BB-UNKNOWN-1", "brand": "Bluebark Co"},
+    "unknown_color": {"sku": "BB-UNKNOWN-1", "color": "Teal Mist"}
+  },
+  "demo_decisions_focus": [
+    "missing_price",
+    "unknown_brand_alias",
+    "publication"
+  ]
+}
