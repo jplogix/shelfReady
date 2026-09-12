@@ -41,6 +41,9 @@ services:
       - shelfready_storage:/app/storage
     expose:
       - "8000"
+    networks:
+      - default
+      - dokploy
 
   worker:
     build:
@@ -83,7 +86,15 @@ services:
         condition: service_started
     expose:
       - "3000"
+    networks:
+      - default
+      - dokploy
 
 volumes:
   shelfready_pgdata:
   shelfready_storage:
+
+networks:
+  dokploy:
+    external: true
+    name: dokploy-network
