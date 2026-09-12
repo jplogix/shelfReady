@@ -30,6 +30,7 @@ from app.policy.normalize import (
     normalize_colors,
     normalize_type,
 )
+from app.policy.readiness import refresh_product_readiness
 from app.policy.seo import build_seo_draft, sanitize_supplier_text
 from app.policy.validate import compute_diffs, validate_product_fields
 
@@ -94,6 +95,13 @@ def process_product(
         "currency": original.get("currency") or "USD",
         "stock": original.get("stock"),
         "image_filename": original.get("image_filename"),
+        "gtin": original.get("gtin"),
+        "upc": original.get("upc"),
+        "ean": original.get("ean"),
+        "mpn": original.get("mpn"),
+        "model": original.get("model"),
+        "size": original.get("size"),
+        "pack_quantity": original.get("pack_quantity"),
     }
 
     # Safe whitespace cleanup already applied — automatic
@@ -339,30 +347,7 @@ def process_product(
                 risk_tier="review",
             )
 
-    # Publication approval required by default
-    if result["is_publishable"] and not decisions:
-        add_decision(
-            DecisionKind.publication,
-            field=None,
-            original_value=None,
-            proposed_value={"sku": product.sku},
-            reason="Default policy requires explicit publication approval for the demo store.",
-            consequence="Approve to allow publish_product for this version.",
-            risk_tier="approval",
-            bulk_key="publication",
-        )
-    elif result["is_publishable"]:
-        # Still require publication approval even if other reviews exist after they clear
-        add_decision(
-            DecisionKind.publication,
-            field=None,
-            original_value=None,
-            proposed_value={"sku": product.sku},
-            reason="Default policy requires explicit publication approval for the demo store.",
-            consequence="Approve to allow publish_product for this version.",
-            risk_tier="approval",
-            bulk_key="publication",
-        )
+    # Publication is handled via batch review-and-publish, not per-product inbox cards.
 
     if decisions:
         product.status = ProductStatus.needs_review
@@ -370,6 +355,7 @@ def process_product(
     else:
         product.status = ProductStatus.ready
 
+    refresh_product_readiness(db, product)
     db.flush()
     return version
 

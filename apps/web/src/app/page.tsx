@@ -1,42 +1,57 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api, Batch } from "@/lib/api";
 import { statusColor } from "@/lib/api";
 
 export default function HomePage() {
+  const router = useRouter();
   const [batches, setBatches] = useState<Batch[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [showDev, setShowDev] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setBatches(await api.batches());
+      const all = await api.batches();
+      setBatches(showDev ? all : all.filter((b) => b.batch_kind !== "import" || b.name.includes("Demo") || b.name.includes("Stress")));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load batches");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showDev]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
+  async function loadDemo() {
+    setBusy("demo");
+    try {
+      const batch = await api.loadDemo();
+      router.push(`/batches/${batch.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Demo load failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function loadSample() {
-    setBusy(true);
+    setBusy("sample");
     try {
       const batch = await api.loadSample();
-      await refresh();
-      window.location.href = `/batches/${batch.id}`;
+      router.push(`/batches/${batch.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sample load failed");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -48,25 +63,42 @@ export default function HomePage() {
           From messy supplier data to storefront-ready products.
         </h1>
         <p className="max-w-xl text-lg text-ink-muted">
-          Import a catalog, inspect corrections, resolve exceptions, publish to the demo store, and verify
-          purchasability — an agent that does the work.
+          Import a catalog, inspect evidence-backed corrections, resolve exceptions in a product workspace,
+          publish to the demo store, and verify purchasability.
         </p>
         <div className="flex flex-wrap gap-3 pt-2">
           <button
             type="button"
-            onClick={loadSample}
-            disabled={busy}
+            onClick={loadDemo}
+            disabled={!!busy}
             className="rounded bg-charcoal px-4 py-2.5 text-sm font-medium text-bg-elevated disabled:opacity-60"
           >
-            {busy ? "Loading sample…" : "Load sample supplier batch"}
+            {busy === "demo" ? "Loading…" : "Try demo catalog"}
           </button>
           <Link
             href="/import"
             className="rounded border border-line bg-bg-elevated px-4 py-2.5 text-sm font-medium"
           >
-            Import CSV
+            Import supplier CSV
           </Link>
+          <button
+            type="button"
+            onClick={() => setShowDev(!showDev)}
+            className="rounded border border-line px-4 py-2.5 text-sm text-ink-muted"
+          >
+            {showDev ? "Hide" : "Show"} dev batches
+          </button>
         </div>
+        {showDev && (
+          <button
+            type="button"
+            onClick={loadSample}
+            disabled={!!busy}
+            className="text-sm text-ink-muted underline disabled:opacity-60"
+          >
+            {busy === "sample" ? "Loading…" : "Load stress-test catalog"}
+          </button>
+        )}
       </section>
 
       {error && (
@@ -79,45 +111,31 @@ export default function HomePage() {
       )}
 
       <section>
-        <h2 className="mb-4 text-2xl">Batches</h2>
+        <h2 className="mb-3 text-xl">Recent batches</h2>
         {loading ? (
           <p className="text-ink-muted">Loading…</p>
         ) : batches.length === 0 ? (
-          <p className="rounded border border-dashed border-line bg-bg-elevated px-4 py-10 text-center text-ink-muted">
-            No batches yet. Load the synthetic supplier dataset to begin.
-          </p>
+          <p className="text-ink-muted">No batches yet. Try the demo catalog to get started.</p>
         ) : (
-          <ul className="space-y-3">
+          <ul className="divide-y divide-line rounded border border-line bg-bg-elevated">
             {batches.map((b) => (
               <li key={b.id}>
                 <Link
                   href={`/batches/${b.id}`}
-                  className="block rounded border border-line bg-bg-elevated px-4 py-4 transition hover:border-charcoal/30"
+                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-bg/60"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-charcoal">{b.name}</div>
-                      <div className="text-sm text-ink-muted">{b.supplier_name}</div>
+                  <div>
+                    <div className="font-medium text-charcoal">{b.name}</div>
+                    <div className="text-sm text-ink-muted">
+                      {b.supplier_name} · {new Date(b.created_at).toLocaleString()}
                     </div>
-                    <span className={`rounded px-2 py-1 text-xs font-medium ${statusColor(b.status)}`}>
-                      {b.status}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className={`rounded px-2 py-0.5 text-xs ${statusColor(b.status)}`}>{b.status}</span>
+                    <span className="text-ink-muted">
+                      {b.counts?.published ?? 0} published · {b.counts?.ready_to_publish ?? 0} ready
                     </span>
                   </div>
-                  <dl className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 md:grid-cols-6">
-                    {[
-                      ["Imported", b.counts?.imported ?? 0],
-                      ["Corrected", b.counts?.corrected ?? 0],
-                      ["Awaiting", b.counts?.awaiting_decisions ?? b.counts?.pending_decisions ?? 0],
-                      ["Published", b.counts?.published ?? 0],
-                      ["Verified", b.counts?.verified ?? 0],
-                      ["Failed", b.counts?.failed ?? 0],
-                    ].map(([label, value]) => (
-                      <div key={String(label)}>
-                        <dt className="text-ink-muted">{label}</dt>
-                        <dd className="text-lg font-medium tabular-nums">{value as number}</dd>
-                      </div>
-                    ))}
-                  </dl>
                 </Link>
               </li>
             ))}

@@ -14,16 +14,19 @@ from app.db.models import (
     Decision,
     DecisionKind,
     DecisionStatus,
+    FieldEvidence,
     Job,
     JobStatus,
     NormalizationRule,
     Product,
+    ProductReadiness,
     ProductStatus,
     ProductVersion,
     RuleScope,
     RunSummary,
 )
-from app.policy.validate import approval_is_valid
+from app.enrichment.service import EnrichmentBudget, enrich_product, get_provider
+from app.policy.readiness import refresh_product_readiness
 from app.services.catalog import process_product, median_prices
 from app.store.demo import DemoStoreAdapter
 
@@ -115,7 +118,23 @@ def get_product_evidence(product_id: str) -> dict[str, Any]:
             for i in product.images
         ],
         "pending_decisions": [
-            {"id": str(d.id), "kind": d.kind.value, "reason": d.reason} for d in decisions
+            {"id": str(d.id), "kind": d.kind.value, "reason": d.reason, "field_name": d.field_name}
+            for d in decisions
+        ],
+        "field_evidence": [
+            {
+                "id": str(e.id),
+                "field_name": e.field_name,
+                "match_outcome": e.match_outcome.value,
+                "match_explanation": e.match_explanation,
+                "proposed_value": e.proposed_value,
+                "source_provider": e.source_provider,
+                "is_replay": e.is_replay,
+                "is_cached": e.is_cached,
+            }
+            for e in ctx.db.scalars(
+                select(FieldEvidence).where(FieldEvidence.product_id == product.id)
+            ).all()
         ],
     }
     ctx.log("get_product_evidence", {"product_id": product_id}, out, evidence=product.sku)
@@ -282,6 +301,38 @@ def create_decision_request(
     return out
 
 
+def lookup_product_identifier(product_id: str) -> dict[str, Any]:
+    """Look up product identifiers and persist field-level evidence."""
+    from pathlib import Path
+
+    from app.config import get_settings
+
+    ctx = get_ctx()
+    product = ctx.db.get(Product, uuid.UUID(product_id))
+    if not product or not product.current_version_id:
+        out = {"error": "not_found"}
+        ctx.log("lookup_product_identifier", {"product_id": product_id}, out, success=False)
+        return out
+    version = ctx.db.get(ProductVersion, product.current_version_id)
+    assert version
+    settings = get_settings()
+    fixtures = settings.fixtures_root
+    if not fixtures.is_absolute():
+        alt = Path(__file__).resolve().parents[4] / "fixtures"
+        fixtures = alt if alt.exists() else Path.cwd() / fixtures
+    provider = get_provider(fixtures)
+    budget = EnrichmentBudget(settings.lookup_budget_per_run)
+    rows = enrich_product(ctx.db, product, version, version.original, provider, budget)
+    refresh_product_readiness(ctx.db, product)
+    out = {
+        "product_id": product_id,
+        "evidence_count": len(rows),
+        "readiness": product.readiness.value if product.readiness else None,
+    }
+    ctx.log("lookup_product_identifier", {"product_id": product_id}, out, evidence=f"{len(rows)} evidence rows")
+    return out
+
+
 def publish_product(product_id: str) -> dict[str, Any]:
     """Publish an eligible product to the internal demo store. Enforces approvals in code."""
     ctx = get_ctx()
@@ -293,56 +344,19 @@ def publish_product(product_id: str) -> dict[str, Any]:
     version = ctx.db.get(ProductVersion, product.current_version_id)
     assert version
     workspace = product.workspace
-    pub_approved = (
-        ctx.db.scalar(
-            select(Decision).where(
-                Decision.product_id == product.id,
-                Decision.kind == DecisionKind.publication,
-                Decision.status.in_([DecisionStatus.approved, DecisionStatus.edited]),
-                Decision.product_version_id == version.id,
-            )
-        )
-        is not None
-    )
-    # Also accept if no publication decision exists but auto_publish and ready
-    if workspace.auto_publish_demo and product.status in {
-        ProductStatus.ready,
-        ProductStatus.needs_review,
-    }:
-        pending_blocking = ctx.db.scalars(
-            select(Decision).where(
-                Decision.product_id == product.id,
-                Decision.status == DecisionStatus.pending,
-                Decision.kind != DecisionKind.publication,
-            )
-        ).all()
-        if not pending_blocking and version.is_publishable:
-            pub_approved = True
 
-    if not approval_is_valid(
-        approved_version_id=str(product.approved_version_id) if product.approved_version_id else (
-            str(version.id) if pub_approved else None
-        ),
-        current_version_id=str(version.id),
-        publication_decision_approved=pub_approved,
-        auto_publish_demo=workspace.auto_publish_demo and version.is_publishable,
-    ):
-        # If publication approved for this version, set approved_version_id
-        if pub_approved:
-            product.approved_version_id = version.id
-        else:
-            out = {
-                "error": "approval_required",
-                "detail": "Publication blocked: missing or stale approval for current version.",
-            }
-            ctx.log("publish_product", {"product_id": product_id}, out, success=False)
-            return out
+    if not product.approved_version_id or str(product.approved_version_id) != str(version.id):
+        out = {
+            "error": "approval_required",
+            "detail": "Publication blocked: product revision not approved for publish.",
+        }
+        ctx.log("publish_product", {"product_id": product_id}, out, success=False)
+        return out
 
     pending = ctx.db.scalars(
         select(Decision).where(
             Decision.product_id == product.id,
             Decision.status == DecisionStatus.pending,
-            Decision.kind != DecisionKind.publication,
         )
     ).all()
     if pending:
@@ -370,10 +384,11 @@ def publish_product(product_id: str) -> dict[str, Any]:
         return out
 
     product.status = ProductStatus.publishing
-    product.approved_version_id = version.id
     sp = ctx.store.publish_product(ctx.db, product, version)
     product.store_product_id = sp.id
+    product.store_slug = sp.slug
     product.status = ProductStatus.published
+    refresh_product_readiness(ctx.db, product)
     ctx.db.flush()
     out = {
         "product_id": product_id,
@@ -475,6 +490,15 @@ def run_deterministic_processing(ctx: ToolContext) -> dict[str, Any]:
     med = median_prices(list(product_originals.values()))
     slugs: set[str] = set()
     processed = 0
+    settings = __import__("app.config", fromlist=["get_settings"]).get_settings()
+    fixtures = settings.fixtures_root
+    from pathlib import Path
+
+    if not fixtures.is_absolute():
+        alt = Path(__file__).resolve().parents[4] / "fixtures"
+        fixtures = alt if alt.exists() else Path.cwd() / fixtures
+    provider = get_provider(fixtures)
+    budget = EnrichmentBudget(settings.lookup_budget_per_run)
     for p in products:
         original = product_originals.get(p.id)
         if not original:
@@ -495,6 +519,9 @@ def run_deterministic_processing(ctx: ToolContext) -> dict[str, Any]:
         )
         if p.current_version_id:
             v = ctx.db.get(ProductVersion, p.current_version_id)
+            if v:
+                enrich_product(ctx.db, p, v, original, provider, budget)
+                refresh_product_readiness(ctx.db, p)
             if v and v.seo.get("url_slug"):
                 slugs.add(v.seo["url_slug"])
         processed += 1

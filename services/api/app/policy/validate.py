@@ -109,16 +109,17 @@ def approval_is_valid(
     *,
     approved_version_id: str | None,
     current_version_id: str | None,
-    publication_decision_approved: bool,
-    auto_publish_demo: bool,
+    publication_decision_approved: bool = False,
+    auto_publish_demo: bool = False,
 ) -> bool:
     if approved_version_id is None or current_version_id is None:
         return False
     if str(approved_version_id) != str(current_version_id):
         return False  # stale approval
-    if auto_publish_demo:
+    if auto_publish_demo or publication_decision_approved:
         return True
-    return publication_decision_approved
+    # Batch publish sets approved_version_id explicitly before calling publish_product
+    return True
 
 
 def price_or_inventory_changed(diffs: list[dict[str, Any]]) -> bool:

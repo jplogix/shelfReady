@@ -57,7 +57,7 @@ def test_end_to_end_sample_process_decisions_publish(client):
     assert r.status_code == 200, r.text
     batch = r.json()
     batch_id = batch["id"]
-    assert batch["counts"]["imported"] >= 18
+    assert batch["counts"]["products"] >= 18
 
     # Clear any leftover pending/running jobs from other tests (single-job MVP lock)
     db = SessionLocal()
@@ -154,17 +154,33 @@ def test_end_to_end_sample_process_decisions_publish(client):
         )
         assert r.status_code == 200
 
-    # Approve remaining low-friction publication decisions for products that are otherwise clear
+    # Resolve remaining pending decisions where possible via edit
     r = client.get(f"/api/batches/{batch_id}/decisions?status=pending", headers=AUTH)
     pending = r.json()
     for d in pending:
-        if d["kind"] == "publication" and d["risk_tier"] == "approval":
-            # Only approve if product has no other pending
+        if d["kind"] == "missing_price":
+            client.post(
+                f"/api/decisions/{d['id']}/resolve",
+                headers=AUTH,
+                json={"action": "edit", "edited_value": "19.00"},
+            )
+        elif d["kind"] in {"unknown_brand_alias", "ambiguous_category", "unknown_color_alias"}:
+            client.post(
+                f"/api/decisions/{d['id']}/resolve",
+                headers=AUTH,
+                json={"action": "edit", "edited_value": "Resolved"},
+            )
+        elif d["kind"] in {"unsupported_claim", "suspicious_price", "exact_duplicate"}:
             client.post(f"/api/decisions/{d['id']}/resolve", headers=AUTH, json={"action": "approve"})
 
-    # Approve suspicious prices so they can proceed if desired — skip auto for demo honesty
-    # Publish pass
-    r = client.post(f"/api/batches/{batch_id}/publish", headers=AUTH)
+    # Publish ready products explicitly
+    r = client.get(f"/api/batches/{batch_id}/products", headers=AUTH)
+    ready_ids = [p["id"] for p in r.json() if p.get("readiness") == "ready_to_publish"]
+    r = client.post(
+        f"/api/batches/{batch_id}/publish",
+        headers=AUTH,
+        json={"product_ids": ready_ids[:3], "verify": True},
+    )
     assert r.status_code == 200
     pub_job = r.json()
     db = SessionLocal()

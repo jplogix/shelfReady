@@ -36,6 +36,7 @@ export type Batch = {
   name: string;
   supplier_name: string;
   status: string;
+  batch_kind?: string;
   column_mapping: Record<string, string | null>;
   source_filename?: string | null;
   counts: Record<string, number>;
@@ -45,10 +46,37 @@ export type Batch = {
 export type Product = {
   id: string;
   sku: string;
+  supplier_sku?: string | null;
+  title?: string | null;
+  price?: string | null;
+  currency?: string | null;
   status: string;
+  readiness?: string | null;
   verification_passed: boolean;
   current_version_id?: string | null;
+  approved_version_id?: string | null;
   store_product_id?: string | null;
+  store_slug?: string | null;
+  thumbnail?: string | null;
+  issue_count?: number;
+  enrichment_summary?: string | null;
+  next_action?: string | null;
+  is_publishable?: boolean;
+};
+
+export type FieldEvidence = {
+  id: string;
+  field_name: string;
+  original_supplier_value?: unknown;
+  proposed_value?: unknown;
+  source_provider: string;
+  source_url?: string | null;
+  lookup_identifier?: string | null;
+  match_outcome: string;
+  match_explanation: string;
+  acceptance_status: string;
+  is_cached: boolean;
+  is_replay: boolean;
 };
 
 export type ProductDetail = Product & {
@@ -66,11 +94,15 @@ export type ProductDetail = Product & {
     classification_source: string;
   }>;
   is_publishable: boolean;
+  import_row_number?: number | null;
+  field_evidence?: FieldEvidence[];
+  decisions?: Decision[];
 };
 
 export type Decision = {
   id: string;
   product_id?: string | null;
+  product_version_id?: string | null;
   kind: string;
   status: string;
   field_name?: string | null;
@@ -125,14 +157,24 @@ export type StoreProduct = {
 export const api = {
   mode: () => request<ModeInfo>("/api/mode"),
   workspace: () => request<{ id: string; name: string; auto_publish_demo: boolean }>("/api/workspace"),
-  updateWorkspace: (body: { auto_publish_demo?: boolean }) =>
-    request("/api/workspace", { method: "PATCH", body: JSON.stringify(body) }),
-  batches: () => request<Batch[]>("/api/batches"),
+  batches: (batchKind?: string) =>
+    request<Batch[]>(batchKind ? `/api/batches?batch_kind=${batchKind}` : "/api/batches"),
   batch: (id: string) => request<Batch>(`/api/batches/${id}`),
   loadSample: () => request<Batch>("/api/demo/load-sample", { method: "POST" }),
+  loadDemo: () => request<Batch>("/api/demo/load-demo", { method: "POST" }),
   process: (id: string) => request<Job>(`/api/batches/${id}/process`, { method: "POST" }),
-  publish: (id: string) => request<Job>(`/api/batches/${id}/publish`, { method: "POST" }),
-  products: (batchId: string) => request<Product[]>(`/api/batches/${batchId}/products`),
+  publish: (id: string, productIds: string[]) =>
+    request<Job>(`/api/batches/${id}/publish`, {
+      method: "POST",
+      body: JSON.stringify({ product_ids: productIds, verify: true }),
+    }),
+  products: (batchId: string, opts?: { readiness?: string; search?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.readiness) params.set("readiness", opts.readiness);
+    if (opts?.search) params.set("search", opts.search);
+    const q = params.toString();
+    return request<Product[]>(`/api/batches/${batchId}/products${q ? `?${q}` : ""}`);
+  },
   product: (id: string) => request<ProductDetail>(`/api/products/${id}`),
   decisions: (batchId: string, status = "pending") =>
     request<Decision[]>(`/api/batches/${batchId}/decisions?status=${status}`),
@@ -147,11 +189,21 @@ export const api = {
     },
   ) => request<Decision>(`/api/decisions/${id}/resolve`, { method: "POST", body: JSON.stringify(body) }),
   jobs: (batchId: string) => request<Job[]>(`/api/batches/${batchId}/jobs`),
-  job: (id: string) => request<Job>(`/api/jobs/${id}`),
   actions: (jobId: string) => request<AgentAction[]>(`/api/jobs/${jobId}/actions`),
   storeProducts: () => request<StoreProduct[]>("/api/store/products"),
   storeProduct: (slug: string) => request<StoreProduct>(`/api/store/products/${slug}`),
-  cart: () => request<{ id: string; items: Array<{ id: string; title?: string; quantity: number; unit_price: string; currency: string; store_product_id: string }> }>("/api/store/cart"),
+  cart: () =>
+    request<{
+      id: string;
+      items: Array<{
+        id: string;
+        title?: string;
+        quantity: number;
+        unit_price: string;
+        currency: string;
+        store_product_id: string;
+      }>;
+    }>("/api/store/cart"),
   addToCart: (store_product_id: string) =>
     request("/api/store/cart/items", {
       method: "POST",
@@ -161,8 +213,21 @@ export const api = {
 };
 
 export function statusColor(status: string): string {
-  if (["published", "ready", "completed", "verified"].includes(status)) return "text-green bg-green-soft";
-  if (["needs_review", "awaiting_decisions", "pending"].includes(status)) return "text-amber bg-amber-soft";
-  if (["failed", "verification_failed"].includes(status)) return "text-red bg-red-soft";
+  if (["published", "ready", "completed", "verified", "ready_to_publish"].includes(status))
+    return "text-green bg-green-soft";
+  if (["needs_review", "awaiting_decisions", "pending", "needs_information"].includes(status))
+    return "text-amber bg-amber-soft";
+  if (["failed", "verification_failed", "has_conflicts"].includes(status))
+    return "text-red bg-red-soft";
   return "text-ink-muted bg-line";
+}
+
+export function readinessLabel(r?: string | null): string {
+  const map: Record<string, string> = {
+    ready_to_publish: "Ready to publish",
+    needs_information: "Needs information",
+    has_conflicts: "Has conflicts",
+    published: "Published",
+  };
+  return r ? map[r] || r : "Unknown";
 }

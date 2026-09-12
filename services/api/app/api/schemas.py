@@ -45,6 +45,7 @@ class BatchOut(BaseModel):
     name: str
     supplier_name: str
     status: str
+    batch_kind: str = "import"
     column_mapping: dict[str, Any]
     source_filename: Optional[str]
     counts: dict[str, Any]
@@ -53,18 +54,47 @@ class BatchOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class StartProcessRequest(BaseModel):
-    column_mapping: dict[str, Optional[str]]
+class PublishRequest(BaseModel):
+    product_ids: list[uuid.UUID] = Field(default_factory=list)
+    verify: bool = True
 
 
 class ProductOut(BaseModel):
     id: uuid.UUID
     sku: str
+    supplier_sku: Optional[str] = None
+    title: Optional[str] = None
+    price: Optional[str] = None
+    currency: Optional[str] = "USD"
     status: str
+    readiness: Optional[str] = None
     verification_passed: bool
     current_version_id: Optional[uuid.UUID]
     approved_version_id: Optional[uuid.UUID]
     store_product_id: Optional[uuid.UUID]
+    store_slug: Optional[str] = None
+    thumbnail: Optional[str] = None
+    issue_count: int = 0
+    enrichment_summary: Optional[str] = None
+    next_action: Optional[str] = None
+    is_publishable: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class FieldEvidenceOut(BaseModel):
+    id: uuid.UUID
+    field_name: str
+    original_supplier_value: Any = None
+    proposed_value: Any = None
+    source_provider: str
+    source_url: Optional[str] = None
+    lookup_identifier: Optional[str] = None
+    match_outcome: str
+    match_explanation: str
+    acceptance_status: str
+    is_cached: bool = False
+    is_replay: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -78,6 +108,13 @@ class ProductDetail(ProductOut):
     provenance: dict[str, Any] = Field(default_factory=dict)
     images: list[dict[str, Any]] = Field(default_factory=list)
     is_publishable: bool = False
+    import_row_number: Optional[int] = None
+    field_evidence: list[FieldEvidenceOut] = Field(default_factory=list)
+    decisions: list["DecisionOut"] = Field(default_factory=list)
+
+
+class StartProcessRequest(BaseModel):
+    column_mapping: dict[str, Optional[str]]
 
 
 class DecisionOut(BaseModel):

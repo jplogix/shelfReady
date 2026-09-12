@@ -77,7 +77,38 @@ class DecisionKind(str, enum.Enum):
     price_change = "price_change"
     inventory_change = "inventory_change"
     publication = "publication"
+    conflicting_variant = "conflicting_variant"
+    confirm_product_match = "confirm_product_match"
+    accept_enrichment = "accept_enrichment"
     other = "other"
+
+
+class ProductReadiness(str, enum.Enum):
+    ready_to_publish = "ready_to_publish"
+    needs_information = "needs_information"
+    has_conflicts = "has_conflicts"
+    published = "published"
+
+
+class BatchKind(str, enum.Enum):
+    stress_test = "stress_test"
+    demo = "demo"
+    import_ = "import"
+
+
+class MatchOutcome(str, enum.Enum):
+    matching_evidence = "matching_evidence"
+    possible_match = "possible_match"
+    conflicting_evidence = "conflicting_evidence"
+    no_match = "no_match"
+    invalid_identifier = "invalid_identifier"
+    lookup_unavailable = "lookup_unavailable"
+
+
+class EvidenceAcceptance(str, enum.Enum):
+    pending = "pending"
+    accepted = "accepted"
+    rejected = "rejected"
 
 
 class ImageClass(str, enum.Enum):
@@ -124,6 +155,11 @@ class Batch(Base):
     column_mapping: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     source_filename: Mapped[Optional[str]] = mapped_column(String(500))
     counts: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    batch_kind: Mapped[BatchKind] = mapped_column(
+        Enum(BatchKind, name="batch_kind", values_callable=lambda x: [e.value for e in x]),
+        default=BatchKind.import_,
+        nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -160,6 +196,11 @@ class Product(Base):
     workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False)
     batch_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("batches.id"), nullable=False)
     sku: Mapped[str] = mapped_column(String(120), nullable=False)
+    supplier_sku: Mapped[Optional[str]] = mapped_column(String(120))
+    readiness: Mapped[Optional[ProductReadiness]] = mapped_column(
+        Enum(ProductReadiness, name="product_readiness"), nullable=True
+    )
+    store_slug: Mapped[Optional[str]] = mapped_column(String(300))
     status: Mapped[ProductStatus] = mapped_column(
         Enum(ProductStatus, name="product_status"), default=ProductStatus.imported, nullable=False
     )
@@ -180,6 +221,50 @@ class Product(Base):
     )
     images: Mapped[list[ProductImage]] = relationship(back_populates="product")
     decisions: Mapped[list[Decision]] = relationship(back_populates="product")
+    field_evidence: Mapped[list[FieldEvidence]] = relationship(back_populates="product")
+
+
+class FieldEvidence(Base):
+    __tablename__ = "field_evidence"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("products.id"), nullable=False)
+    product_version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("product_versions.id"), nullable=False)
+    field_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    original_supplier_value: Mapped[Optional[Any]] = mapped_column(JSONB)
+    proposed_value: Mapped[Optional[Any]] = mapped_column(JSONB)
+    source_provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_url: Mapped[Optional[str]] = mapped_column(String(1000))
+    provider_record_id: Mapped[Optional[str]] = mapped_column(String(200))
+    lookup_identifier: Mapped[Optional[str]] = mapped_column(String(200))
+    lookup_query: Mapped[Optional[str]] = mapped_column(String(200))
+    match_outcome: Mapped[MatchOutcome] = mapped_column(
+        Enum(MatchOutcome, name="match_outcome"), nullable=False
+    )
+    match_explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    acceptance_status: Mapped[EvidenceAcceptance] = mapped_column(
+        Enum(EvidenceAcceptance, name="evidence_acceptance"),
+        default=EvidenceAcceptance.pending,
+        nullable=False,
+    )
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    is_cached: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_replay: Mapped[bool] = mapped_column(Boolean, default=False)
+    raw_response: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+
+    product: Mapped[Product] = relationship(back_populates="field_evidence")
+
+
+class LookupCache(Base):
+    __tablename__ = "lookup_cache"
+    __table_args__ = (UniqueConstraint("provider", "normalized_query", name="uq_lookup_cache"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    normalized_query: Mapped[str] = mapped_column(String(200), nullable=False)
+    response: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ProductVersion(Base):

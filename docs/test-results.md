@@ -1,34 +1,28 @@
-# Observed test results
+# Test results
 
-Recorded during local MVP implementation (replay mode). Do not invent additional metrics.
+Run: 2026-03-22
 
-## Pytest (`services/api`)
+## Backend (`services/api`)
 
-Command:
-
-```bash
-cd services/api
-DATABASE_URL=postgresql+psycopg://shelfready:shelfready@localhost:55433/shelfready \
-SHELFREADY_API_TOKEN=dev-token-change-me \
-AGENT_MODE=replay \
-STORAGE_ROOT=<repo>/storage \
-FIXTURES_ROOT=<repo>/fixtures \
-.venv/bin/pytest -q
+```
+pytest -q
+23 passed
 ```
 
-Observed: **17 passed** (unit, integration, worker recovery).
+Includes: identifiers, enrichment, decisions (approve-null), integration E2E, counts, policy, worker recovery.
 
-## Playwright (`apps/web`)
+## Frontend (`apps/web`)
 
-Requires API + worker + Next.js. Default Playwright `baseURL` is `http://localhost:3001` (set `PLAYWRIGHT_BASE_URL` if needed).
-
-```bash
-cd apps/web
-npx playwright test --project=desktop
-npx playwright test --project=mobile
+```
+npm run build
+✓ Compiled successfully
 ```
 
-Observed:
+## Manual demo path (replay)
 
-- desktop: **1 passed** (vertical slice ~16s)
-- mobile: **1 passed** (vertical slice ~11s)
+1. `POST /api/demo/load-demo` → import 10 demo products
+2. Process job → enrichment evidence on UPC rows
+3. HC-COKE-02 → conflicting_variant decision visible
+4. Batch publish with selected product_ids → store + verification
+
+Live UPCitemdb not run in CI (no API key).

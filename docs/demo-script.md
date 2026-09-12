@@ -1,19 +1,21 @@
 # Five-minute demo script
 
-**Setup:** `AGENT_MODE=replay`, API + worker + web running. UI shows **Fixture replay mode**.
+**Setup:** `AGENT_MODE=replay`, `LOOKUP_PROVIDER=replay`, API + worker + web running. UI shows **Fixture replay mode**.
 
-1. **Problem (30s)** — Small stores spend hours cleaning supplier spreadsheets. ShelfReady is an agent that imports, inspects, escalates, publishes, and verifies — not a chatbot that only recommends.
+1. **Problem (30s)** — Small stores spend hours cleaning supplier spreadsheets. ShelfReady imports, enriches from barcode evidence, escalates conflicts, publishes, and verifies — not a chatbot that only recommends.
 
-2. **Load sample (30s)** — Home → **Load sample supplier batch**. Show ~20 products with messy brands, colors, prices, stock, and a prompt-injection description.
+2. **Try demo catalog (30s)** — Home → **Try demo catalog**. Show ~10 household rows with real UPCs and documented demo scenarios (`fixtures/demo_catalog.md`).
 
-3. **Process (45s)** — **Run processing**. Open **Run activity** — real tool actions (`inspect_batch`, etc.), not fake chat. Show counts: corrected / awaiting decisions.
+3. **Prepare products (45s)** — **Prepare products**. Open **Run activity** — tool actions include `lookup_product_identifier`. Batch summary shows ready / needs information / conflicts.
 
-4. **Workbench (45s)** — Open a product: original vs proposed, brand alias, SEO preview with **noindex** note, image classification source `fixture_replay`.
+4. **Workbench (60s)** — Open **HC-COKE-01**: sparse supplier row enriched from replay barcode evidence (labeled **replay fixture**). Open **HC-COKE-02**: “Supplier says Black. The barcode record says Red.” Resolve the variant conflict in the drawer.
 
-5. **Decisions (60s)** — Decision inbox: resolve **missing price** (edit a value) and one **unknown brand** or **publication** approval. Emphasize approvals bind to product version.
+5. **Missing price (30s)** — **HC-NOPRICE-01**: enter price in drawer (no “Approve null” path).
 
-6. **Publish + verify (60s)** — **Publish eligible**. Open Demo store → product page → add in-stock item to cart. Show out-of-stock blocked if present. Mention republish does not duplicate `external_id`.
+6. **Publish + verify (60s)** — Select ready products → **Review and publish**. Open demo store product link from drawer. Show verification count on batch summary.
 
-7. **Close (30s)** — Live mode uses Strands + Bedrock with the same tools; replay never pretends to be live. AgentCore is documented, not required for the demo.
+7. **Stress test (optional, dev view)** — **Show dev batches** → load stress-test catalog for alias/duplicate/injection cases.
+
+8. **Close (30s)** — Live mode uses Strands + Bedrock with the same tools; replay never pretends to be live. Live UPC lookups require `UPCITEMDB_API_KEY` (`docs/provider-setup.md`).
 
 **Use only counts visible on screen — do not invent accuracy % or time saved.**

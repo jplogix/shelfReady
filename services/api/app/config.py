@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
     workspace_name: str = "Demo Store"
     currency_default: str = "USD"
+    lookup_provider: Literal["upcitemdb", "replay"] = "replay"
+    upcitemdb_api_key: str = ""
+    lookup_budget_per_run: int = 25
+    lookup_timeout_seconds: float = 10.0
+    lookup_max_retries: int = 2
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -21,10 +21,12 @@ from app.api.schemas import (
     ColumnMapping,
     DecisionOut,
     DecisionResolve,
+    FieldEvidenceOut,
     JobOut,
     ModeResponse,
     ProductDetail,
     ProductOut,
+    PublishRequest,
     StartProcessRequest,
     StoreProductOut,
     WorkspaceOut,
@@ -34,18 +36,21 @@ from app.config import get_settings
 from app.db.models import (
     AgentAction,
     Batch,
+    BatchKind,
     BatchStatus,
     Cart,
     CartItem,
     Decision,
     DecisionKind,
     DecisionStatus,
+    FieldEvidence,
     ImportRow,
     Job,
     JobStatus,
     NormalizationRule,
     Product,
     ProductImage,
+    ProductReadiness,
     ProductStatus,
     ProductVersion,
     RuleScope,
@@ -53,6 +58,8 @@ from app.db.models import (
     Workspace,
 )
 from app.db.session import get_db
+from app.policy.readiness import refresh_product_readiness
+from app.services.batch_metrics import product_list_item, recompute_batch_counts
 from app.services.csv_import import (
     apply_mapping,
     parse_csv_bytes,
@@ -69,39 +76,6 @@ def get_workspace(db: Session) -> Workspace:
     if not ws:
         raise HTTPException(500, "Workspace not seeded")
     return ws
-
-
-def recompute_batch_counts(db: Session, batch: Batch) -> dict[str, Any]:
-    products = db.scalars(select(Product).where(Product.batch_id == batch.id)).all()
-    counts = {
-        "imported": len(products),
-        "corrected": 0,
-        "awaiting_decisions": 0,
-        "published": 0,
-        "verified": 0,
-        "failed": 0,
-    }
-    for p in products:
-        if p.status == ProductStatus.published:
-            counts["published"] += 1
-            if p.verification_passed:
-                counts["verified"] += 1
-        elif p.status in {ProductStatus.failed, ProductStatus.verification_failed}:
-            counts["failed"] += 1
-        elif p.status == ProductStatus.needs_review:
-            counts["awaiting_decisions"] += 1
-        if p.current_version_id:
-            v = db.get(ProductVersion, p.current_version_id)
-            if v and v.diffs:
-                counts["corrected"] += 1
-    pending = db.scalar(
-        select(func.count()).select_from(Decision).where(
-            Decision.batch_id == batch.id, Decision.status == DecisionStatus.pending
-        )
-    )
-    counts["pending_decisions"] = int(pending or 0)
-    batch.counts = counts
-    return counts
 
 
 @router.get("/mode", response_model=ModeResponse)
@@ -134,8 +108,17 @@ def update_workspace(body: WorkspaceUpdate, db: Session = Depends(get_db)) -> Wo
 
 
 @router.get("/batches", response_model=list[BatchOut])
-def list_batches(db: Session = Depends(get_db)) -> list[Batch]:
-    return list(db.scalars(select(Batch).order_by(Batch.created_at.desc())).all())
+def list_batches(
+    batch_kind: str | None = None,
+    db: Session = Depends(get_db),
+) -> list[Batch]:
+    q = select(Batch).order_by(Batch.created_at.desc())
+    if batch_kind:
+        try:
+            q = q.where(Batch.batch_kind == BatchKind(batch_kind))
+        except ValueError:
+            pass
+    return list(db.scalars(q).all())
 
 
 @router.post("/batches", response_model=BatchOut)
@@ -249,6 +232,7 @@ def commit_import(
                 workspace_id=ws.id,
                 batch_id=batch.id,
                 sku=f"{sku}__row{row.row_number}",
+                supplier_sku=sku,
                 status=ProductStatus.imported,
             )
         else:
@@ -257,9 +241,12 @@ def commit_import(
                 workspace_id=ws.id,
                 batch_id=batch.id,
                 sku=sku,
+                supplier_sku=sku,
                 status=ProductStatus.imported,
             )
             seen_skus[sku] = product
+        if product.supplier_sku is None:
+            product.supplier_sku = mapped["sku"]
         db.add(product)
         db.flush()
         row.product_id = product.id
@@ -267,24 +254,26 @@ def commit_import(
         # Attach fixture/local image if present
         fname = mapped.get("image_filename")
         if fname:
-            src = fixtures_root / "images" / fname
-            if src.exists():
-                try:
-                    saved = storage.copy_fixture(src, subdirectory=f"products/{product.id}")
-                    img = ProductImage(
-                        id=uuid.uuid4(),
-                        product_id=product.id,
-                        original_path=saved["original_path"],
-                        derivative_path=saved["derivative_path"],
-                        mime_type=saved["mime_type"],
-                        width=saved["width"],
-                        height=saved["height"],
-                        size_bytes=saved["size_bytes"],
-                        position=0,
-                    )
-                    db.add(img)
-                except StorageError:
-                    pass
+            for img_dir in (fixtures_root / "demo_images", fixtures_root / "images"):
+                src = img_dir / fname
+                if src.exists():
+                    try:
+                        saved = storage.copy_fixture(src, subdirectory=f"products/{product.id}")
+                        img = ProductImage(
+                            id=uuid.uuid4(),
+                            product_id=product.id,
+                            original_path=saved["original_path"],
+                            derivative_path=saved["derivative_path"],
+                            mime_type=saved["mime_type"],
+                            width=saved["width"],
+                            height=saved["height"],
+                            size_bytes=saved["size_bytes"],
+                            position=0,
+                        )
+                        db.add(img)
+                        break
+                    except StorageError:
+                        pass
 
     batch.status = BatchStatus.ready
     recompute_batch_counts(db, batch)
@@ -320,18 +309,25 @@ def start_process(batch_id: uuid.UUID, db: Session = Depends(get_db)) -> Job:
 
 
 @router.post("/batches/{batch_id}/publish", response_model=JobOut)
-def start_publish(batch_id: uuid.UUID, db: Session = Depends(get_db)) -> Job:
+def start_publish(
+    batch_id: uuid.UUID,
+    body: PublishRequest | None = None,
+    db: Session = Depends(get_db),
+) -> Job:
     batch = db.get(Batch, batch_id)
     if not batch:
         raise HTTPException(404, "Batch not found")
     settings = get_settings()
+    checkpoint: dict[str, Any] = {}
+    if body and body.product_ids:
+        checkpoint["product_ids"] = [str(pid) for pid in body.product_ids]
     job = Job(
         id=uuid.uuid4(),
         batch_id=batch.id,
         job_type="publish",
         status=JobStatus.pending,
         agent_mode=settings.agent_mode,
-        checkpoint={},
+        checkpoint=checkpoint,
     )
     db.add(job)
     db.commit()
@@ -340,10 +336,28 @@ def start_publish(batch_id: uuid.UUID, db: Session = Depends(get_db)) -> Job:
 
 
 @router.get("/batches/{batch_id}/products", response_model=list[ProductOut])
-def list_products(batch_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Product]:
-    return list(
-        db.scalars(select(Product).where(Product.batch_id == batch_id).order_by(Product.sku)).all()
-    )
+def list_products(
+    batch_id: uuid.UUID,
+    readiness: str | None = None,
+    search: str | None = None,
+    db: Session = Depends(get_db),
+) -> list[ProductOut]:
+    products = db.scalars(
+        select(Product).where(Product.batch_id == batch_id).order_by(Product.sku)
+    ).all()
+    items = [product_list_item(db, p) for p in products]
+    if readiness:
+        items = [i for i in items if i.get("readiness") == readiness]
+    if search:
+        q = search.lower()
+        items = [
+            i
+            for i in items
+            if q in (i.get("title") or "").lower()
+            or q in (i.get("sku") or "").lower()
+            or q in (i.get("supplier_sku") or "").lower()
+        ]
+    return [ProductOut(**i) for i in items]
 
 
 @router.get("/products/{product_id}", response_model=ProductDetail)
@@ -352,14 +366,14 @@ def get_product(product_id: uuid.UUID, db: Session = Depends(get_db)) -> Product
     if not product:
         raise HTTPException(404, "Product not found")
     version = db.get(ProductVersion, product.current_version_id) if product.current_version_id else None
+    row = db.scalar(select(ImportRow).where(ImportRow.product_id == product.id).limit(1))
+    evidence = db.scalars(select(FieldEvidence).where(FieldEvidence.product_id == product.id)).all()
+    decisions = db.scalars(
+        select(Decision).where(Decision.product_id == product.id, Decision.status == DecisionStatus.pending)
+    ).all()
+    base = product_list_item(db, product)
     return ProductDetail(
-        id=product.id,
-        sku=product.sku,
-        status=product.status.value,
-        verification_passed=product.verification_passed,
-        current_version_id=product.current_version_id,
-        approved_version_id=product.approved_version_id,
-        store_product_id=product.store_product_id,
+        **base,
         original=version.original if version else None,
         proposed=version.proposed if version else None,
         seo=version.seo if version else None,
@@ -367,6 +381,7 @@ def get_product(product_id: uuid.UUID, db: Session = Depends(get_db)) -> Product
         blockers=version.blockers if version else [],
         provenance=version.provenance if version else {},
         is_publishable=version.is_publishable if version else False,
+        import_row_number=row.row_number if row else None,
         images=[
             {
                 "id": str(i.id),
@@ -377,6 +392,8 @@ def get_product(product_id: uuid.UUID, db: Session = Depends(get_db)) -> Product
             }
             for i in product.images
         ],
+        field_evidence=[FieldEvidenceOut.model_validate(e) for e in evidence],
+        decisions=[DecisionOut.model_validate(d) for d in decisions],
     )
 
 
@@ -410,27 +427,41 @@ def resolve_decision(
         if product and product.current_version_id != decision.product_version_id:
             raise HTTPException(409, "Stale decision: product was edited after this request")
 
+    # Block approve-null for decisions that require a value
+    requires_value = {
+        DecisionKind.missing_price,
+        DecisionKind.accept_enrichment,
+    }
+    requires_edit = {
+        DecisionKind.unknown_brand_alias,
+        DecisionKind.unknown_color_alias,
+        DecisionKind.ambiguous_category,
+    }
+
     if body.action == "approve":
+        if decision.kind in requires_value and decision.proposed_value is None:
+            raise HTTPException(400, "Cannot approve without a proposed value; use edit to supply one.")
+        if decision.kind in requires_edit:
+            raise HTTPException(400, "Cannot approve alias/category without a value; use edit.")
         decision.status = DecisionStatus.approved
-        if decision.product_id and decision.product_version_id:
+        if decision.product_id:
             product = db.get(Product, decision.product_id)
-            if product and decision.kind == DecisionKind.publication:
-                product.approved_version_id = decision.product_version_id
             if product and decision.kind == DecisionKind.suspicious_price:
-                # accept price
                 version = db.get(ProductVersion, decision.product_version_id)
                 if version:
                     version.is_publishable = True
-            if product and decision.field_name and decision.proposed_value is not None:
+            if product and decision.kind == DecisionKind.accept_enrichment and decision.proposed_value is not None:
                 version = db.get(ProductVersion, product.current_version_id)
-                if version and decision.kind in {
-                    DecisionKind.unknown_brand_alias,
-                    DecisionKind.ambiguous_category,
-                    DecisionKind.unknown_color_alias,
-                }:
-                    # keep proposed if provided
-                    pass
+                if version and decision.field_name:
+                    proposed = dict(version.proposed)
+                    proposed[decision.field_name] = decision.proposed_value
+                    version.proposed = proposed
+                    product.approved_version_id = None
+            if product and decision.kind == DecisionKind.confirm_product_match:
+                product.approved_version_id = None
     elif body.action == "edit":
+        if body.edited_value is None and decision.kind in {DecisionKind.missing_price, *requires_edit}:
+            raise HTTPException(400, "Edited value is required for this decision.")
         decision.status = DecisionStatus.edited
         decision.edited_value = body.edited_value
         if decision.product_id:
@@ -454,8 +485,9 @@ def resolve_decision(
                         proposed["price"] = str(body.edited_value)
                     elif field == "stock":
                         proposed["stock"] = int(body.edited_value)
+                    elif field and body.edited_value is not None:
+                        proposed[field] = body.edited_value
                     version.proposed = proposed
-                    # invalidate prior approval
                     product.approved_version_id = None
     elif body.action == "reject":
         decision.status = DecisionStatus.rejected
@@ -515,21 +547,11 @@ def resolve_decision(
                         )
                         version.proposed = result["proposed"]
                         version.blockers = result["blockers"]
-                        # publication still needed unless approved
-                        pub_ok = product.approved_version_id == product.current_version_id
-                        version.is_publishable = result["is_publishable"] and (
-                            pub_ok
-                            or any(
-                                d.kind == DecisionKind.publication
-                                and d.status in {DecisionStatus.approved, DecisionStatus.edited}
-                                for d in db.scalars(
-                                    select(Decision).where(Decision.product_id == product.id)
-                                ).all()
-                            )
-                        )
+                        version.is_publishable = result["is_publishable"] and not pending
                         product.status = (
-                            ProductStatus.ready if result["is_publishable"] else ProductStatus.needs_review
+                            ProductStatus.ready if result["is_publishable"] and not pending else ProductStatus.needs_review
                         )
+                    refresh_product_readiness(db, product)
 
     batch = db.get(Batch, decision.batch_id)
     if batch:
@@ -678,9 +700,10 @@ def load_sample_batch(db: Session = Depends(get_db)) -> Batch:
     batch = Batch(
         id=uuid.uuid4(),
         workspace_id=ws.id,
-        name="Synthetic Supplier Catalog",
+        name=f"Stress-test catalog · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC",
         supplier_name="Northwind Synthetic Supply",
         status=BatchStatus.draft,
+        batch_kind=BatchKind.stress_test,
         counts={},
     )
     db.add(batch)
@@ -690,6 +713,40 @@ def load_sample_batch(db: Session = Depends(get_db)) -> Batch:
     mapping = suggest_column_mapping(headers)
     batch.column_mapping = mapping
     batch.source_filename = "supplier_catalog.csv"
+    for i, raw in enumerate(rows, start=1):
+        db.add(ImportRow(id=uuid.uuid4(), batch_id=batch.id, row_number=i, raw=raw))
+    db.commit()
+    return commit_import(batch.id, StartProcessRequest(column_mapping=mapping), db)
+
+
+@router.post("/demo/load-demo", response_model=BatchOut)
+def load_demo_batch(db: Session = Depends(get_db)) -> Batch:
+    """Load the demonstration catalog with real barcodes and labeled scenarios."""
+    settings = get_settings()
+    fixtures = Path(settings.fixtures_root)
+    if not fixtures.is_absolute():
+        alt = Path(__file__).resolve().parents[4] / "fixtures"
+        fixtures = alt if alt.exists() else Path.cwd() / fixtures
+    csv_path = fixtures / "demo_catalog.csv"
+    if not csv_path.exists():
+        raise HTTPException(500, f"Demo CSV missing at {csv_path}")
+    ws = get_workspace(db)
+    batch = Batch(
+        id=uuid.uuid4(),
+        workspace_id=ws.id,
+        name=f"Demo catalog · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC",
+        supplier_name="Household Essentials Co.",
+        status=BatchStatus.draft,
+        batch_kind=BatchKind.demo,
+        counts={},
+    )
+    db.add(batch)
+    db.commit()
+    data = csv_path.read_bytes()
+    headers, rows = parse_csv_bytes(data)
+    mapping = suggest_column_mapping(headers)
+    batch.column_mapping = mapping
+    batch.source_filename = "demo_catalog.csv"
     for i, raw in enumerate(rows, start=1):
         db.add(ImportRow(id=uuid.uuid4(), batch_id=batch.id, row_number=i, raw=raw))
     db.commit()

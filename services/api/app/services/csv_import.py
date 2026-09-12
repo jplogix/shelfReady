@@ -18,6 +18,13 @@ CANONICAL_FIELDS = [
     "currency",
     "stock",
     "image_filename",
+    "gtin",
+    "upc",
+    "ean",
+    "mpn",
+    "model",
+    "size",
+    "pack_quantity",
 ]
 
 
@@ -33,7 +40,16 @@ FIELD_ALIASES = {
     "currency": ["currency", "curr", "currency_code"],
     "stock": ["stock", "qty", "quantity", "inventory"],
     "image_filename": ["image_filename", "image", "image_file", "primary_image"],
+    "gtin": ["gtin", "barcode", "global_trade_item_number"],
+    "upc": ["upc", "upc_code", "upc_a"],
+    "ean": ["ean", "ean13", "ean_13"],
+    "mpn": ["mpn", "manufacturer_part_number", "part_number"],
+    "model": ["model", "model_number", "model_no"],
+    "size": ["size", "item_size", "variant_size"],
+    "pack_quantity": ["pack_quantity", "pack_qty", "pack_size", "units_per_pack"],
 }
+
+IDENTIFIER_FIELDS = {"gtin", "upc", "ean"}
 
 
 def suggest_column_mapping(headers: list[str]) -> dict[str, str | None]:
@@ -69,7 +85,14 @@ def apply_mapping(raw: dict[str, str], mapping: dict[str, str | None]) -> dict[s
     out: dict[str, Any] = {}
     for field, source in mapping.items():
         if source and source in raw:
-            out[field] = raw[source].strip() if isinstance(raw[source], str) else raw[source]
+            val = raw[source]
+            if isinstance(val, str):
+                val = val.strip()
+            # Preserve barcode strings exactly (including leading zeros)
+            if field in IDENTIFIER_FIELDS or field in {"mpn", "model", "size", "pack_quantity", "sku"}:
+                out[field] = val if val != "" else None
+            else:
+                out[field] = val if val != "" else None
         else:
             out[field] = None
     return out
