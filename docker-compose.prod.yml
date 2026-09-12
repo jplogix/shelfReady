@@ -41,9 +41,6 @@ services:
       - shelfready_storage:/app/storage
     expose:
       - "8000"
-    networks:
-      - default
-      - dokploy
 
   worker:
     build:
@@ -78,23 +75,16 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
         NEXT_PUBLIC_API_TOKEN: ${NEXT_PUBLIC_API_TOKEN:-dev-token-change-me}
+        INTERNAL_API_URL: http://api:8000
     restart: unless-stopped
     depends_on:
       api:
         condition: service_started
     expose:
       - "3000"
-    networks:
-      - default
-      - dokploy
 
 volumes:
   shelfready_pgdata:
   shelfready_storage:
-
-networks:
-  dokploy:
-    external: true
-    name: dokploy-network
