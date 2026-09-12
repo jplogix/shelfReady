@@ -1,0 +1,17 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/node_modules
+**/.next
+/storage
+**/.DS_Store
+docs
+agent-transcripts
+*.md
+!services/api/README.md

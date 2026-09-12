@@ -1,0 +1,89 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shelfready}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shelfready}
+      POSTGRES_DB: ${POSTGRES_DB:-shelfready}
+    volumes:
+      - shelfready_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-shelfready} -d ${POSTGRES_DB:-shelfready}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-shelfready}:${POSTGRES_PASSWORD:-shelfready}@postgres:5432/${POSTGRES_DB:-shelfready}
+      SHELFREADY_API_TOKEN: ${SHELFREADY_API_TOKEN:-dev-token-change-me}
+      AGENT_MODE: ${AGENT_MODE:-replay}
+      LOOKUP_PROVIDER: ${LOOKUP_PROVIDER:-replay}
+      FIXTURES_ROOT: /app/fixtures
+      STORAGE_ROOT: /app/storage
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      AWS_REGION: ${AWS_REGION:-us-west-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-global.anthropic.claude-sonnet-4-6}
+      UPCITEMDB_API_KEY: ${UPCITEMDB_API_KEY:-}
+      LOOKUP_BUDGET_PER_RUN: ${LOOKUP_BUDGET_PER_RUN:-25}
+    volumes:
+      - shelfready_storage:/app/storage
+    expose:
+      - "8000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+    command: ["python", "-m", "app.worker"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-shelfready}:${POSTGRES_PASSWORD:-shelfready}@postgres:5432/${POSTGRES_DB:-shelfready}
+      SHELFREADY_API_TOKEN: ${SHELFREADY_API_TOKEN:-dev-token-change-me}
+      AGENT_MODE: ${AGENT_MODE:-replay}
+      LOOKUP_PROVIDER: ${LOOKUP_PROVIDER:-replay}
+      FIXTURES_ROOT: /app/fixtures
+      STORAGE_ROOT: /app/storage
+      AWS_REGION: ${AWS_REGION:-us-west-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-global.anthropic.claude-sonnet-4-6}
+      UPCITEMDB_API_KEY: ${UPCITEMDB_API_KEY:-}
+      LOOKUP_BUDGET_PER_RUN: ${LOOKUP_BUDGET_PER_RUN:-25}
+    volumes:
+      - shelfready_storage:/app/storage
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_API_TOKEN: ${NEXT_PUBLIC_API_TOKEN:-dev-token-change-me}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    expose:
+      - "3000"
+
+volumes:
+  shelfready_pgdata:
+  shelfready_storage:
