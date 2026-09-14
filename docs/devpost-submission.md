@@ -23,7 +23,7 @@ ShelfReady reduces repetitive catalog work while keeping humans responsible for 
 - Source: https://github.com/jplogix/shelfReady
 - Live demonstration: https://shelfready.svgfy.com
 - Architecture: https://github.com/jplogix/shelfReady/blob/master/docs/architecture.md
-- Demo video: ADD_PUBLIC_YOUTUBE_OR_VIMEO_URL
+- Demo video: provide the final public YouTube or Vimeo URL in the Devpost form.
 
 ## Testing instructions
 
@@ -41,4 +41,4 @@ To run the complete operator workflow, follow the repository README. Use `AGENT_
 6. Open the public storefront, product provenance, and cart.
 7. End with the architecture diagram and the live/source links.
 
-Before submitting, replace the video placeholder above and add the entrant's AWS Builder ID in the Devpost form.
+Before submitting, add the public video URL and the entrant's AWS Builder ID in the Devpost form.
