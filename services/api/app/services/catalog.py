@@ -21,6 +21,7 @@ from app.db.models import (
     ProductStatus,
     ProductVersion,
 )
+from app.policy.images import lookup_image_meta, suitability_for
 from app.policy.money import MoneyError, parse_money
 from app.policy.normalize import (
     clean_whitespace,
@@ -33,18 +34,6 @@ from app.policy.normalize import (
 from app.policy.readiness import refresh_product_readiness
 from app.policy.seo import build_seo_draft, sanitize_supplier_text
 from app.policy.validate import compute_diffs, validate_product_fields
-
-
-FIXTURE_IMAGE_CLASSES: dict[str, tuple[ImageClass, bool]] = {
-    # filename -> (class, prefer_as_primary)
-    "nw-tote-black.png": (ImageClass.product_only, True),
-    "nw-tote-model.png": (ImageClass.model_worn, False),
-    "aurora-mug.png": (ImageClass.product_only, True),
-    "aurora-hoodie.png": (ImageClass.product_only, True),
-    "gucci-sunglass.png": (ImageClass.product_only, True),
-    "packaging-only.png": (ImageClass.packaging, False),
-    "detail-stitch.png": (ImageClass.detail, False),
-}
 
 
 def active_rules_map(db: Session, workspace_id: uuid.UUID, rule_type: str) -> list[tuple[str, str]]:
@@ -112,33 +101,39 @@ def process_product(
         "description": "sanitized_untrusted",
     }
 
-    # Image classification / primary selection
+    # Image classification / primary selection. Loading success ≠ category suitability.
     has_primary = False
     images = list(product.images)
+    fname = original.get("image_filename") or ""
+    product_type = original.get("product_type")
+    category = original.get("category")
     if images:
         for img in images:
-            fname = original.get("image_filename") or ""
-            # Match by stored path stem
             stem = img.original_path.split("/")[-1]
-            matched = None
-            for key, val in FIXTURE_IMAGE_CLASSES.items():
-                if key in stem or key == fname:
-                    matched = val
-                    break
-            if matched:
-                img.image_class, prefer = matched
+            meta = lookup_image_meta(fname) or lookup_image_meta(stem)
+            img.is_primary = False
+            if meta:
+                img.image_class = meta.image_class
                 img.classification_source = "fixture_replay"
+                img.source_kind = meta.source_kind
+                img.usage_permission = meta.usage_permission
+                img.suitability = suitability_for(meta, product_type, category)
             else:
                 img.image_class = ImageClass.unknown
                 img.classification_source = "unknown"
-                prefer = False
-            img.is_primary = False
+                img.source_kind = "unknown"
+                img.usage_permission = "unknown"
+                img.suitability = "unclassified"
 
-        # Prefer product_only
+        matching_primary = [
+            i
+            for i in images
+            if i.image_class == ImageClass.product_only and i.suitability == "category_match"
+        ]
         product_only = [i for i in images if i.image_class == ImageClass.product_only]
-        if product_only:
-            product_only[0].is_primary = True
-            # Reorder: primary first, model-worn secondary
+        chosen = matching_primary or product_only
+        if chosen:
+            chosen[0].is_primary = True
             has_primary = True
         else:
             has_primary = False

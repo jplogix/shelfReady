@@ -164,6 +164,16 @@ export type AgentAction = {
   created_at: string;
 };
 
+export type StoreImage = {
+  path: string;
+  alt?: string;
+  is_primary?: boolean;
+  source_kind?: string | null;
+  usage_permission?: string | null;
+  suitability?: string | null;
+  caption?: string | null;
+};
+
 export type StoreProduct = {
   id: string;
   slug: string;
@@ -175,8 +185,10 @@ export type StoreProduct = {
   stock: number;
   available: boolean;
   primary_image_path?: string | null;
-  images: Array<{ path: string; alt?: string; is_primary?: boolean }>;
+  images: StoreImage[];
   sku: string;
+  image_caption?: string | null;
+  image_suitability?: string | null;
 };
 
 export type ListingProvenance = {
@@ -186,9 +198,11 @@ export type ListingProvenance = {
   agent_mode: string;
   lookup_mode: string;
   original_row: Record<string, unknown>;
-  corrections: Array<{ field: string; original?: unknown; accepted?: unknown }>;
+  original_fields: Array<{ field: string; label: string; value?: unknown }>;
+  corrections: Array<{ field: string; label: string; original?: unknown; accepted?: unknown }>;
   evidence: Array<{
     field_name: string;
+    label: string;
     original_supplier_value?: unknown;
     proposed_value?: unknown;
     source_provider: string;
@@ -204,6 +218,25 @@ export type ListingProvenance = {
     agreements: Array<Record<string, unknown>>;
     conflicts: Array<Record<string, unknown>>;
   } | null;
+  image_caption?: string | null;
+  image_suitability?: string | null;
+};
+
+export type ShopperCart = {
+  id: string;
+  purpose: string;
+  items: Array<{
+    id: string;
+    title?: string | null;
+    slug?: string | null;
+    image?: string | null;
+    quantity: number;
+    unit_price: string;
+    currency: string;
+    store_product_id: string;
+    available: boolean;
+    stock: number;
+  }>;
 };
 
 export const api = {
@@ -265,22 +298,11 @@ export const api = {
   storeProduct: (slug: string) => request<StoreProduct>(`/api/store/products/${slug}`),
   listingProvenance: (slug: string) =>
     request<ListingProvenance>(`/api/store/products/${slug}/provenance`),
-  cart: () =>
-    request<{
-      id: string;
-      items: Array<{
-        id: string;
-        title?: string;
-        quantity: number;
-        unit_price: string;
-        currency: string;
-        store_product_id: string;
-      }>;
-    }>("/api/store/cart"),
-  addToCart: (store_product_id: string) =>
-    request("/api/store/cart/items", {
+  cart: () => request<ShopperCart>("/api/store/cart"),
+  addToCart: (store_product_id: string, quantity = 1) =>
+    request<ShopperCart>("/api/store/cart/items", {
       method: "POST",
-      body: JSON.stringify({ store_product_id, quantity: 1, purpose: "operator" }),
+      body: JSON.stringify({ store_product_id, quantity, purpose: "shopper" }),
     }),
   mediaUrl: (path: string) => `/api/media/${path}`,
 };

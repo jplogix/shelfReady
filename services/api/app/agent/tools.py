@@ -114,6 +114,9 @@ def get_product_evidence(product_id: str) -> dict[str, Any]:
                 "is_primary": i.is_primary,
                 "path": i.derivative_path or i.original_path,
                 "classification_source": i.classification_source,
+                "source_kind": i.source_kind,
+                "usage_permission": i.usage_permission,
+                "suitability": i.suitability,
             }
             for i in product.images
         ],

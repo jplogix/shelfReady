@@ -184,6 +184,10 @@ class StoreImageOut(BaseModel):
     path: str
     alt: Optional[str] = None
     is_primary: bool = False
+    source_kind: Optional[str] = None
+    usage_permission: Optional[str] = None
+    suitability: Optional[str] = None
+    caption: Optional[str] = None
 
 
 class StoreProductOut(BaseModel):
@@ -201,18 +205,28 @@ class StoreProductOut(BaseModel):
     primary_image_path: Optional[str]
     images: list[StoreImageOut]
     sku: str
+    image_caption: Optional[str] = None
+    image_suitability: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
 
+class ListingFieldOut(BaseModel):
+    field: str
+    label: str
+    value: Any = None
+
+
 class ListingCorrectionOut(BaseModel):
     field: str
+    label: str
     original: Any = None
     accepted: Any = None
 
 
 class ListingEvidenceOut(BaseModel):
     field_name: str
+    label: str
     original_supplier_value: Any = None
     proposed_value: Any = None
     source_provider: str
@@ -237,9 +251,12 @@ class ListingProvenanceOut(BaseModel):
     agent_mode: str
     lookup_mode: str
     original_row: dict[str, Any]
+    original_fields: list[ListingFieldOut] = Field(default_factory=list)
     corrections: list[ListingCorrectionOut]
     evidence: list[ListingEvidenceOut]
     assessment: Optional[ListingAssessmentOut] = None
+    image_caption: Optional[str] = None
+    image_suitability: Optional[str] = None
 
 
 class CartItemOut(BaseModel):
@@ -249,6 +266,10 @@ class CartItemOut(BaseModel):
     unit_price: Decimal
     currency: str
     title: Optional[str] = None
+    slug: Optional[str] = None
+    image: Optional[str] = None
+    available: bool = True
+    stock: int = 0
 
 
 class CartOut(BaseModel):
@@ -260,4 +281,4 @@ class CartOut(BaseModel):
 class AddToCartRequest(BaseModel):
     store_product_id: uuid.UUID
     quantity: int = 1
-    purpose: str = "operator"
+    purpose: str = "shopper"

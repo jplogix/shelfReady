@@ -29,6 +29,7 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal
 from app.policy.readiness import refresh_product_readiness
+from app.services.demo_catalog import PUBLIC_DEMO_SKUS, canonical_sku
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +67,19 @@ def ensure_public_storefront() -> None:
         db.close()
 
 
+def ready_public_demo_ids(db: Session, batch_id: uuid.UUID) -> list[uuid.UUID]:
+    from app.services.batch_metrics import product_list_item
+
+    return [
+        p.id
+        for p in db.scalars(select(Product).where(Product.batch_id == batch_id)).all()
+        if canonical_sku(p.supplier_sku or p.sku) in PUBLIC_DEMO_SKUS
+        and product_list_item(db, p).get("readiness") == ProductReadiness.ready_to_publish.value
+    ]
+
+
 def _bootstrap(db: Session) -> None:
     from app.api.routes import import_fixture_batch, start_process, start_publish
-    from app.services.batch_metrics import product_list_item
 
     batch = db.scalar(select(Batch).where(Batch.name == PUBLIC_DEMO_BATCH))
     if not batch:
@@ -90,13 +101,9 @@ def _bootstrap(db: Session) -> None:
         refresh_product_readiness(db, product)
     db.commit()
 
-    ready_ids = [
-        p.id
-        for p in db.scalars(select(Product).where(Product.batch_id == batch.id)).all()
-        if product_list_item(db, p).get("readiness") == ProductReadiness.ready_to_publish.value
-    ]
+    ready_ids = ready_public_demo_ids(db, batch.id)
     if not ready_ids:
-        logger.warning("Public demo catalog processed but no products were ready to publish")
+        logger.warning("Public demo catalog processed but no curated products were ready to publish")
         return
 
     pub_job = start_publish(batch.id, PublishRequest(product_ids=ready_ids, verify=True), db)

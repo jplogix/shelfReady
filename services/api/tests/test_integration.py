@@ -226,7 +226,7 @@ def test_end_to_end_sample_process_decisions_publish(client):
             r = client.post(
                 "/api/store/cart/items",
                 headers=AUTH,
-                json={"store_product_id": sp["id"], "quantity": 1, "purpose": "operator"},
+                json={"store_product_id": sp["id"], "quantity": 1, "purpose": "shopper"},
             )
             assert r.status_code == 200, r.text
             assert len(r.json()["items"]) >= 1

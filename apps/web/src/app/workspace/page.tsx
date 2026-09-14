@@ -19,7 +19,11 @@ export default function WorkspacePage() {
       setBatches(
         showDev
           ? all
-          : all.filter((b) => b.batch_kind !== "import" || b.name.includes("Demo") || b.name.includes("Stress")),
+          : all.filter((b) => {
+              if (b.batch_kind === "stress_test" || b.batch_kind === "import") return false;
+              if (/^(Public demo test|live-test|debug |dbg )/i.test(b.name)) return false;
+              return true;
+            }),
       );
       setError(null);
     } catch (e) {

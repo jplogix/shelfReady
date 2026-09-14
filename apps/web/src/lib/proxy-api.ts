@@ -28,6 +28,8 @@ export async function proxyToApi(req: NextRequest, path: string): Promise<NextRe
   const headers = new Headers();
   const contentType = req.headers.get("content-type");
   if (contentType) headers.set("content-type", contentType);
+  const cookie = req.headers.get("cookie");
+  if (cookie) headers.set("cookie", cookie);
   if (!publicPath || req.headers.get("authorization")) {
     headers.set("Authorization", `Bearer ${apiToken()}`);
   }
@@ -57,6 +59,11 @@ export async function proxyToApi(req: NextRequest, path: string): Promise<NextRe
     statusText: res.statusText,
     headers: responseHeaders,
   });
+  const setCookies =
+    typeof res.headers.getSetCookie === "function" ? res.headers.getSetCookie() : [];
+  for (const cookieValue of setCookies) {
+    out.headers.append("set-cookie", cookieValue);
+  }
   if (isLocalDevelopment(req) && !hasValidSession(req)) {
     applySessionCookie(out);
   }

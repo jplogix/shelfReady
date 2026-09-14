@@ -12,7 +12,7 @@ export function ProductCard({ product, priority = false }: { product: StoreProdu
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={api.mediaUrl(product.primary_image_path)}
-            alt={product.title}
+            alt={product.images.find((img) => img.is_primary)?.alt || product.title}
             className="aspect-square w-full object-cover"
             loading={priority ? "eager" : "lazy"}
           />

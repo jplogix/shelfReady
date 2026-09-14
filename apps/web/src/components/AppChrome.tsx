@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, ModeInfo } from "@/lib/api";
-import { getShopperCart, shopperCount } from "@/lib/shopper-cart";
+import { CART_EVENT, shopperCount } from "@/lib/shopper-cart";
 
 function isOperatorPath(pathname: string): boolean {
   return (
@@ -43,14 +43,15 @@ export function ModeBadge() {
 function CartLink() {
   const [count, setCount] = useState(0);
   useEffect(() => {
-    const refresh = () => setCount(shopperCount(getShopperCart()));
-    refresh();
-    window.addEventListener("sr-cart", refresh);
-    window.addEventListener("storage", refresh);
-    return () => {
-      window.removeEventListener("sr-cart", refresh);
-      window.removeEventListener("storage", refresh);
+    const refresh = () => {
+      api
+        .cart()
+        .then((cart) => setCount(shopperCount(cart.items)))
+        .catch(() => setCount(0));
     };
+    refresh();
+    window.addEventListener(CART_EVENT, refresh);
+    return () => window.removeEventListener(CART_EVENT, refresh);
   }, []);
   return (
     <Link

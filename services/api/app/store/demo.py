@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Cart, CartItem, Product, ProductVersion, StoreProduct, Workspace
+from app.policy.images import lookup_image_meta
 from app.policy.seo import build_json_ld, unique_slug
 
 
@@ -53,15 +54,33 @@ class DemoStoreAdapter(StoreAdapter):
             existing_slugs.discard(existing.slug)
         slug = unique_slug(slug_base, existing_slugs)
 
-        images = [
-            {
-                "path": img.derivative_path or img.original_path,
-                "alt": seo.get("image_alt") or title,
-                "is_primary": img.is_primary,
-                "class": img.image_class.value if hasattr(img.image_class, "value") else img.image_class,
-            }
-            for img in sorted(product.images, key=lambda i: (not i.is_primary, i.position))
-        ]
+        images = []
+        for img in sorted(product.images, key=lambda i: (not i.is_primary, i.position)):
+            fname = (version.original or {}).get("image_filename") or ""
+            meta = lookup_image_meta(fname) or lookup_image_meta(img.original_path)
+            path = img.derivative_path or img.original_path
+            caption = ""
+            if img.usage_permission == "demonstration_only":
+                caption = (
+                    meta.caption
+                    if meta
+                    else "Demonstration illustration · not authentic product photography"
+                )
+            alt = seo.get("image_alt") or title
+            if caption:
+                alt = f"{title} — demonstration illustration, not authentic product photography"
+            images.append(
+                {
+                    "path": path,
+                    "alt": alt,
+                    "is_primary": img.is_primary,
+                    "class": img.image_class.value if hasattr(img.image_class, "value") else img.image_class,
+                    "source_kind": img.source_kind,
+                    "usage_permission": img.usage_permission,
+                    "suitability": img.suitability,
+                    "caption": caption or "",
+                }
+            )
         primary = next((i for i in images if i["is_primary"]), images[0] if images else None)
         primary_path = primary["path"] if primary else None
         canonical = f"/store/products/{slug}"
@@ -143,6 +162,25 @@ class DemoStoreAdapter(StoreAdapter):
             bool(store_product.primary_image_path) or store_product.stock == 0,
             f"Primary image path={store_product.primary_image_path}",
         )
+        primary_meta = next((img for img in (store_product.images or []) if img.get("is_primary")), None)
+        if primary_meta:
+            check(
+                "image_loaded",
+                bool(primary_meta.get("path")),
+                f"Image loaded from {primary_meta.get('path')}",
+            )
+            suitability = primary_meta.get("suitability") or "unclassified"
+            check(
+                "image_suitability_recorded",
+                suitability in {"category_match", "category_mismatch", "unclassified"},
+                f"suitability={suitability} source={primary_meta.get('source_kind')}",
+            )
+            if suitability == "category_mismatch":
+                check(
+                    "image_not_authentic_photo",
+                    primary_meta.get("usage_permission") == "demonstration_only",
+                    "Mismatched fixture image is labeled demonstration-only, not authentic photography",
+                )
         # Price/currency consistency with JSON-LD
         offer = (store_product.json_ld or {}).get("offers") or {}
         price_match = str(offer.get("price")) == str(store_product.price)

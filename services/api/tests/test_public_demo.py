@@ -24,12 +24,12 @@ from app.agent.runner import execute_job
 from app.api.routes import import_fixture_batch, start_process, start_publish
 from app.api.schemas import PublishRequest
 from app.config import get_settings
-from app.db.models import BatchKind, Job, JobStatus, Product, ProductReadiness
+from app.db.models import BatchKind, Job, JobStatus, Product, StoreProduct
 from app.db.session import SessionLocal
 from app.main import app
 from app.policy.readiness import refresh_product_readiness
-from app.services.batch_metrics import product_list_item
-from app.services.bootstrap_storefront import _accept_safe_decisions
+from app.services.bootstrap_storefront import _accept_safe_decisions, ready_public_demo_ids
+from app.services.demo_catalog import PUBLIC_DEMO_SKUS
 
 get_settings.cache_clear()
 
@@ -41,6 +41,7 @@ def client():
 
 def test_demo_catalog_publishes_ready_products_and_exposes_provenance(client):
     db = SessionLocal()
+    slugs: list[str] = []
     try:
         for job in db.scalars(select(Job).where(Job.status.in_([JobStatus.pending, JobStatus.running]))).all():
             job.status = JobStatus.failed
@@ -60,28 +61,49 @@ def test_demo_catalog_publishes_ready_products_and_exposes_provenance(client):
         for product in db.scalars(select(Product).where(Product.batch_id == batch.id)).all():
             refresh_product_readiness(db, product)
         db.commit()
-        ready_ids = [
-            p.id
-            for p in db.scalars(select(Product).where(Product.batch_id == batch.id)).all()
-            if product_list_item(db, p).get("readiness") == ProductReadiness.ready_to_publish.value
-        ]
-        assert ready_ids, "Demo catalog should yield at least one publishable product after safe approvals"
+        ready_ids = ready_public_demo_ids(db, batch.id)
+        assert ready_ids, "Demo catalog should yield curated publishable products after safe approvals"
         pub = start_publish(batch.id, PublishRequest(product_ids=ready_ids, verify=True), db)
-        execute_job(db, str(pub.id))
+        result = execute_job(db, str(pub.id))
+        assert result.get("published", 0) >= 1, result
+        skus = [p.sku for p in db.scalars(select(Product).where(Product.id.in_(ready_ids))).all()]
+        published = db.scalars(select(StoreProduct).where(StoreProduct.variant_sku.in_(skus))).all()
+        assert published, result
+        titles = [row.title for row in published]
+        assert all("CONFLICT" not in title for title in titles)
+        assert all("Invalid Barcode" not in title for title in titles)
+        for row in published:
+            path = row.primary_image_path or ""
+            assert "hoodie" not in path
+            assert "aurora-mug" not in path
+        slugs = [row.slug for row in published]
+        assert all(sku.split("__")[0] in PUBLIC_DEMO_SKUS for sku in skus)
     finally:
         db.close()
 
     listed = client.get("/api/store/products")
     assert listed.status_code == 200
     products = listed.json()
-    assert len(products) >= 1
-    sample = products[0]
+    titles = " ".join(p["title"] for p in products)
+    assert "CONFLICT" not in titles
+    assert "Invalid Barcode" not in titles
+    assert "Tote" not in titles
+    sample = next((p for p in products if p["slug"] in slugs), None)
+    assert sample is not None
     assert "external_id" not in sample
     assert sample["title"]
-    provenance = client.get(f"/api/store/products/{sample['slug']}/provenance")
+    coke = next((p for p in products if p["slug"] in slugs and "Coca-Cola" in p["title"]), None)
+    assert coke is not None, "Sparse barcode row should publish as an enriched Coca-Cola listing"
+    provenance = client.get(f"/api/store/products/{coke['slug']}/provenance")
     assert provenance.status_code == 200, provenance.text
     body = provenance.json()
     assert body["original_row"] is not None
     assert isinstance(body["corrections"], list)
     assert isinstance(body["evidence"], list)
+    assert body["original_fields"]
+    assert "label" in body["original_fields"][0]
+    if body["corrections"]:
+        assert "label" in body["corrections"][0]
     assert body["agent_mode"] in {"replay", "live"}
+    if "Coca-Cola" in coke["title"]:
+        assert body["evidence"] or body["corrections"]

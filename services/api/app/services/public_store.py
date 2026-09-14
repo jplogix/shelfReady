@@ -11,10 +11,12 @@ from app.api.schemas import (
     ListingAssessmentOut,
     ListingCorrectionOut,
     ListingEvidenceOut,
+    ListingFieldOut,
     ListingProvenanceOut,
     StoreImageOut,
     StoreProductOut,
 )
+from app.policy.field_labels import field_label
 from app.config import get_settings
 from app.db.models import (
     EvidenceAcceptance,
@@ -23,6 +25,7 @@ from app.db.models import (
     ProductVersion,
     StoreProduct,
 )
+from app.services.demo_catalog import is_public_demo_sku
 
 PUBLIC_ORIGINAL_FIELDS = (
     "sku",
@@ -50,6 +53,9 @@ SKIP_CORRECTION_FIELDS = {
     "brand_original",
     "category_original",
     "color_label",
+    "identifier_raw",
+    "identifier_normalized",
+    "identifier_valid",
 }
 
 
@@ -67,6 +73,21 @@ def _enum_value(value: Any) -> Any:
     return value.value if hasattr(value, "value") else value
 
 
+def list_public_store_products(db: Session) -> list[StoreProduct]:
+    """Shop grid: curated demonstration listings only. Stress-test rows stay off the public catalog."""
+    rows = list(db.scalars(select(StoreProduct).order_by(StoreProduct.title)).all())
+    visible: list[StoreProduct] = []
+    for row in rows:
+        product = db.get(Product, row.product_id)
+        sku = (product.supplier_sku or product.sku) if product else row.variant_sku
+        if not is_public_demo_sku(sku):
+            continue
+        if "CONFLICT" in (row.title or ""):
+            continue
+        visible.append(row)
+    return visible
+
+
 def public_images(store_product: StoreProduct) -> list[StoreImageOut]:
     images: list[StoreImageOut] = []
     for img in store_product.images or []:
@@ -77,12 +98,22 @@ def public_images(store_product: StoreProduct) -> list[StoreImageOut]:
                 path=str(img["path"]),
                 alt=img.get("alt") or store_product.title,
                 is_primary=bool(img.get("is_primary")),
+                source_kind=img.get("source_kind"),
+                usage_permission=img.get("usage_permission"),
+                suitability=img.get("suitability"),
+                caption=img.get("caption") or None,
             )
         )
     return images
 
 
+def _primary_image(store_product: StoreProduct) -> StoreImageOut | None:
+    rows = public_images(store_product)
+    return next((img for img in rows if img.is_primary), rows[0] if rows else None)
+
+
 def to_public_store_product(store_product: StoreProduct) -> StoreProductOut:
+    primary = _primary_image(store_product)
     return StoreProductOut(
         id=store_product.id,
         slug=store_product.slug,
@@ -96,6 +127,8 @@ def to_public_store_product(store_product: StoreProduct) -> StoreProductOut:
         primary_image_path=store_product.primary_image_path,
         images=public_images(store_product),
         sku=store_product.variant_sku,
+        image_caption=primary.caption if primary else None,
+        image_suitability=primary.suitability if primary else None,
     )
 
 
@@ -159,6 +192,7 @@ def listing_provenance(db: Session, store_product: StoreProduct) -> ListingProve
         corrections.append(
             ListingCorrectionOut(
                 field=field,
+                label=field_label(field),
                 original=diff.get("original"),
                 accepted=diff.get("proposed"),
             )
@@ -176,6 +210,7 @@ def listing_provenance(db: Session, store_product: StoreProduct) -> ListingProve
             evidence_rows.append(
                 ListingEvidenceOut(
                     field_name=row.field_name,
+                    label=field_label(row.field_name),
                     original_supplier_value=row.original_supplier_value,
                     proposed_value=row.proposed_value,
                     source_provider=row.source_provider,
@@ -196,6 +231,12 @@ def listing_provenance(db: Session, store_product: StoreProduct) -> ListingProve
     else:
         label = "Live agent · live lookup"
 
+    original_fields = [
+        ListingFieldOut(field=key, label=field_label(key), value=value)
+        for key, value in original_row.items()
+    ]
+    primary = _primary_image(store_product)
+
     return ListingProvenanceOut(
         slug=store_product.slug,
         title=store_product.title,
@@ -203,7 +244,10 @@ def listing_provenance(db: Session, store_product: StoreProduct) -> ListingProve
         agent_mode=agent,
         lookup_mode=lookup,
         original_row=original_row,
+        original_fields=original_fields,
         corrections=corrections,
         evidence=evidence_rows,
         assessment=_public_assessment(assessment_raw if isinstance(assessment_raw, dict) else None),
+        image_caption=primary.caption if primary else None,
+        image_suitability=primary.suitability if primary else None,
     )

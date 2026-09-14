@@ -19,6 +19,7 @@ from app.db.models import (
     LookupCache,
     MatchOutcome,
     Product,
+    ProductStatus,
     ProductVersion,
 )
 from app.enrichment.base import LookupProvider, LookupRecord, LookupResult
@@ -26,6 +27,7 @@ from app.enrichment.compare import FieldComparison, compare_record, overall_outc
 from app.enrichment.replay import ReplayLookupProvider
 from app.enrichment.upcitemdb import UPCitemdbProvider
 from app.policy.identifiers import normalize_lookup_query, pick_lookup_identifier, validate_gtin
+from app.policy.validate import compute_diffs, validate_product_fields
 
 
 class EnrichmentBudget:
@@ -352,8 +354,9 @@ def enrich_product(
                     consequence="Confirm product match before applying external data.",
                     risk_tier="approval",
                 )
-            )
+                )
 
+        _reconcile_after_enrichment(db, product, version)
         return evidence_rows
 
     # No barcode: brand+mpn search if specific enough
@@ -382,5 +385,35 @@ def enrich_product(
                 )
             )
 
+    _reconcile_after_enrichment(db, product, version)
     db.flush()
     return evidence_rows
+
+
+def _reconcile_after_enrichment(db: Session, product: Product, version: ProductVersion) -> None:
+    """Drop stale missing-field blockers once evidence filled the proposed row."""
+    has_primary = any(img.is_primary for img in product.images)
+    result = validate_product_fields(dict(version.proposed), has_primary_image=has_primary)
+    version.proposed = result["proposed"]
+    version.diffs = compute_diffs(version.original or {}, version.proposed)
+    version.blockers = result["blockers"] + [{"kind": "review", **r} for r in result["reviews"]]
+    version.is_publishable = result["is_publishable"]
+    filled = {key for key in ("title", "brand", "model", "size") if version.proposed.get(key)}
+    pending = db.scalars(
+        select(Decision).where(
+            Decision.product_id == product.id,
+            Decision.status == DecisionStatus.pending,
+        )
+    ).all()
+    for decision in pending:
+        if decision.kind == DecisionKind.other and decision.field_name in filled:
+            decision.status = DecisionStatus.approved
+            decision.proposed_value = version.proposed.get(decision.field_name)
+    remaining = [
+        d
+        for d in pending
+        if d.status == DecisionStatus.pending and not (d.kind == DecisionKind.other and d.field_name in filled)
+    ]
+    if version.is_publishable and not remaining:
+        product.status = ProductStatus.ready
+    db.flush()

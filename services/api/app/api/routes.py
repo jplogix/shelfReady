@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Cookie, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -16,7 +16,6 @@ from app.api.schemas import (
     BatchCreate,
     BatchOut,
     BulkDecisionResolve,
-    CartItemOut,
     CartOut,
     ColumnMapping,
     DecisionOut,
@@ -39,8 +38,6 @@ from app.db.models import (
     Batch,
     BatchKind,
     BatchStatus,
-    Cart,
-    CartItem,
     Decision,
     DecisionKind,
     DecisionStatus,
@@ -59,14 +56,23 @@ from app.db.models import (
     Workspace,
 )
 from app.db.session import get_db
+from app.policy.images import lookup_image_meta
 from app.policy.readiness import refresh_product_readiness
 from app.services.batch_metrics import product_list_item, recompute_batch_counts
-from app.services.public_store import listing_provenance, to_public_store_product
 from app.services.csv_import import (
     apply_mapping,
     parse_csv_bytes,
     suggest_column_mapping,
     validate_mapped_row,
+)
+from app.services.public_store import list_public_store_products, listing_provenance, to_public_store_product
+from app.services.shopper_cart import (
+    SHOPPER_COOKIE,
+    SHOPPER_PURPOSE,
+    add_store_item,
+    cart_out,
+    get_or_create_cart,
+    parse_cart_id,
 )
 from app.storage.local import LocalStorage, StorageError
 
@@ -290,6 +296,10 @@ def commit_import(
                             size_bytes=saved["size_bytes"],
                             position=0,
                         )
+                        meta = lookup_image_meta(str(fname))
+                        if meta:
+                            img.source_kind = meta.source_kind
+                            img.usage_permission = meta.usage_permission
                         db.add(img)
                         break
                     except StorageError:
@@ -409,6 +419,9 @@ def get_product(product_id: uuid.UUID, db: Session = Depends(get_db)) -> Product
                 "class": i.image_class.value,
                 "is_primary": i.is_primary,
                 "classification_source": i.classification_source,
+                "source_kind": i.source_kind,
+                "usage_permission": i.usage_permission,
+                "suitability": i.suitability,
             }
             for i in product.images
         ],
@@ -662,7 +675,7 @@ def list_actions(job_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Agent
 @public_router.get("/store/products", response_model=list[StoreProductOut])
 @router.get("/store/products", response_model=list[StoreProductOut])
 def store_list(db: Session = Depends(get_db)) -> list[StoreProductOut]:
-    rows = list(db.scalars(select(StoreProduct).order_by(StoreProduct.title)).all())
+    rows = list_public_store_products(db)
     return [to_public_store_product(sp) for sp in rows]
 
 
@@ -683,72 +696,82 @@ def store_provenance(slug: str, db: Session = Depends(get_db)) -> ListingProvena
     return listing_provenance(db, sp)
 
 
-@router.post("/store/cart/items", response_model=CartOut)
-def add_to_cart(body: AddToCartRequest, db: Session = Depends(get_db)) -> CartOut:
+def _set_shopper_cookie(response: Response, cart_id: uuid.UUID) -> None:
+    response.set_cookie(
+        SHOPPER_COOKIE,
+        str(cart_id),
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 14,
+        path="/",
+    )
+
+
+@public_router.post("/store/cart/items", response_model=CartOut)
+def add_shopper_cart_item(
+    body: AddToCartRequest,
+    response: Response,
+    sr_shopper_cart: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+) -> CartOut:
+    if body.purpose == "verification":
+        raise HTTPException(400, "Verification carts cannot be used from the storefront")
     ws = get_workspace(db)
     sp = db.get(StoreProduct, body.store_product_id)
     if not sp:
         raise HTTPException(404, "Product not found")
-    if not sp.available or sp.stock <= 0:
-        raise HTTPException(400, "Out of stock — cannot add to cart")
-    cart = db.scalar(
-        select(Cart).where(Cart.workspace_id == ws.id, Cart.purpose == body.purpose).limit(1)
+    cart = get_or_create_cart(
+        db, ws, purpose=SHOPPER_PURPOSE, cart_id=parse_cart_id(sr_shopper_cart)
     )
-    if not cart:
-        cart = Cart(id=uuid.uuid4(), workspace_id=ws.id, purpose=body.purpose)
-        db.add(cart)
-        db.flush()
-    existing = db.scalar(
-        select(CartItem).where(
-            CartItem.cart_id == cart.id, CartItem.store_product_id == sp.id
-        )
-    )
-    if existing:
-        existing.quantity += body.quantity
-    else:
-        db.add(
-            CartItem(
-                id=uuid.uuid4(),
-                cart_id=cart.id,
-                store_product_id=sp.id,
-                quantity=body.quantity,
-                unit_price=sp.price,
-                currency=sp.currency,
-            )
-        )
+    add_store_item(db, cart, sp, body.quantity)
     db.commit()
-    return _cart_out(db, cart)
+    db.refresh(cart)
+    _set_shopper_cookie(response, cart.id)
+    return cart_out(db, cart)
+
+
+@public_router.get("/store/cart", response_model=CartOut)
+def get_shopper_cart(
+    response: Response,
+    sr_shopper_cart: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+) -> CartOut:
+    cart_id = parse_cart_id(sr_shopper_cart)
+    if not cart_id:
+        return CartOut(id=uuid.uuid4(), purpose=SHOPPER_PURPOSE, items=[])
+    ws = get_workspace(db)
+    cart = get_or_create_cart(db, ws, purpose=SHOPPER_PURPOSE, cart_id=cart_id)
+    db.commit()
+    _set_shopper_cookie(response, cart.id)
+    return cart_out(db, cart)
+
+
+@router.post("/store/cart/items", response_model=CartOut)
+def add_to_cart(body: AddToCartRequest, db: Session = Depends(get_db)) -> CartOut:
+    if body.purpose == "verification":
+        raise HTTPException(400, "Verification carts are created only by publication verification")
+    if body.purpose == SHOPPER_PURPOSE:
+        raise HTTPException(400, "Use the public storefront cart for shopper items")
+    ws = get_workspace(db)
+    sp = db.get(StoreProduct, body.store_product_id)
+    if not sp:
+        raise HTTPException(404, "Product not found")
+    cart = get_or_create_cart(db, ws, purpose=body.purpose or "operator")
+    add_store_item(db, cart, sp, body.quantity)
+    db.commit()
+    db.refresh(cart)
+    return cart_out(db, cart)
 
 
 @router.get("/store/cart", response_model=CartOut)
 def get_cart(purpose: str = "operator", db: Session = Depends(get_db)) -> CartOut:
+    if purpose in {SHOPPER_PURPOSE, "verification"}:
+        raise HTTPException(400, "Shopper and verification carts are not shared with operator carts")
     ws = get_workspace(db)
-    cart = db.scalar(
-        select(Cart).where(Cart.workspace_id == ws.id, Cart.purpose == purpose).limit(1)
-    )
-    if not cart:
-        cart = Cart(id=uuid.uuid4(), workspace_id=ws.id, purpose=purpose)
-        db.add(cart)
-        db.commit()
-        db.refresh(cart)
-    return _cart_out(db, cart)
-
-
-def _cart_out(db: Session, cart: Cart) -> CartOut:
-    items = []
-    for it in cart.items:
-        sp = db.get(StoreProduct, it.store_product_id)
-        items.append(
-            CartItemOut(
-                id=it.id,
-                store_product_id=it.store_product_id,
-                quantity=it.quantity,
-                unit_price=it.unit_price,
-                currency=it.currency,
-                title=sp.title if sp else None,
-            )
-        )
-    return CartOut(id=cart.id, purpose=cart.purpose, items=items)
+    cart = get_or_create_cart(db, ws, purpose=purpose)
+    db.commit()
+    db.refresh(cart)
+    return cart_out(db, cart)
 
 
 def import_fixture_batch(

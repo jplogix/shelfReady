@@ -48,6 +48,7 @@ export function isPublicApiPath(path: string): boolean {
   if (path === "/api/session" || path === "/api/health" || path === "/health") return true;
   if (path === "/api/mode") return true;
   if (path.startsWith("/api/store/products")) return true;
+  if (path.startsWith("/api/store/cart")) return true;
   if (path.startsWith("/api/media/")) return true;
   return false;
 }

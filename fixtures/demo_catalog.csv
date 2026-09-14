@@ -1,12 +1,12 @@
 sku,title,description,brand,color,category,product_type,price,currency,stock,image_filename,upc,mpn,model,size,pack_quantity
-HC-COKE-01,,,,,,,,USD,24,aurora-mug.png,049000028911,,,
-HC-COKE-02,Coca-Cola 12oz Can,Classic cola.,Coca-Cola,Black,Beverages,Soda,1.99,USD,48,aurora-mug.png,049000028911,,12 oz,1
-HC-CREST-01,Crest Complete Whitening Toothpaste,Fluoride anticavity toothpaste.,Crest,White,Personal Care,Toothpaste,4.99,USD,36,aurora-mug.png,037000004885,037000004885,Complete,6.2 oz,1
-HC-BAD-01,Invalid Barcode Sample,Demonstration row with bad check digit.,Demo Co,Blue,Personal Care,Sample,9.99,USD,5,aurora-mug.png,049000028910,,,
-HC-NOPRICE-01,Tide Pods Laundry Detergent,HE compatible pacs.,Tide,Blue,Household,Detergent,,USD,20,aurora-mug.png,030775020373,,Pods,42 count,1
-HC-TIDE-01,Tide PODS Spring Meadow,Detergent pacs for laundry.,Tide,Blue,Household,Detergent,12.97,USD,30,aurora-mug.png,030775020373,,Pods,42 count,1
-HC-DEOD-01,,,,Old Spice,,,,USD,18,aurora-hoodie.png,,012345678905,Swagger,,1
-HC-TOWEL-01,Bounty Select-A-Size Paper Towels,Absorbent paper towels.,Bounty,White,Household,Paper Towels,15.49,USD,22,aurora-hoodie.png,003700045304,,Select-A-Size,6 rolls,1
-HC-SHAM-01,Head & Shoulders Classic Clean,Anti-dandruff shampoo. Doctor recommended miracle cure guaranteed.,Head & Shoulders,Blue,Personal Care,Shampoo,7.99,USD,14,aurora-mug.png,088591100123,,Classic Clean,13.5 oz,1
-HC-DUP-01,Multi-Surface Cleaner,All-purpose cleaner.,CleanCo,Green,Household,Cleaner,5.49,USD,10,aurora-mug.png,078492085345,,Spray,32 oz,1
-HC-DUP-01,Multi-Surface Cleaner CONFLICT,Same SKU different title/price for duplicate demo.,CleanCo,Green,Household,Cleaner,6.99,USD,8,aurora-mug.png,078492085345,,Spray,32 oz,1
+HC-COKE-01,,,,,Beverages,Soda,5.99,USD,24,demo-soda-can.png,049000028911,,,
+HC-COKE-02,Coca-Cola 12oz Can,Classic cola.,Coca-Cola,Black,Beverages,Soda,1.99,USD,48,demo-soda-can.png,049000028911,,12 oz,1
+HC-CREST-01,Crest Complete Whitening Toothpaste,Fluoride anticavity toothpaste.,Crest,White,Personal Care,Toothpaste,4.99,USD,36,demo-toothpaste.png,037000004885,037000004885,Complete,6.2 oz,1
+HC-BAD-01,Invalid Barcode Sample,Demonstration row with bad check digit.,Demo Co,Blue,Personal Care,Sample,9.99,USD,5,demo-toothpaste.png,049000028910,,,
+HC-NOPRICE-01,Tide Pods Laundry Detergent,HE compatible pacs.,Tide,Blue,Household,Detergent,,USD,20,demo-laundry-pods.png,030775020373,,Pods,42 count,1
+HC-TIDE-01,Tide PODS Spring Meadow,Detergent pacs for laundry.,Tide,Blue,Household,Detergent,12.97,USD,30,demo-laundry-pods.png,030775020373,,Pods,42 count,1
+HC-DEOD-01,,,,Old Spice,,,,USD,18,demo-deodorant.png,,012345678905,Swagger,,1
+HC-TOWEL-01,Bounty Select-A-Size Paper Towels,Absorbent paper towels.,Bounty,White,Household,Paper Towels,15.49,USD,22,demo-paper-towels.png,003700045304,,Select-A-Size,6 rolls,1
+HC-SHAM-01,Head & Shoulders Classic Clean,Anti-dandruff shampoo. Doctor recommended miracle cure guaranteed.,Head & Shoulders,Blue,Personal Care,Shampoo,7.99,USD,14,demo-shampoo.png,088591100123,,Classic Clean,13.5 oz,1
+HC-DUP-01,Multi-Surface Cleaner,All-purpose cleaner.,CleanCo,Green,Household,Cleaner,5.49,USD,10,demo-cleaner.png,078492085345,,Spray,32 oz,1
+HC-DUP-01,Multi-Surface Cleaner CONFLICT,Same SKU different title/price for duplicate demo.,CleanCo,Green,Household,Cleaner,6.99,USD,8,demo-cleaner.png,078492085345,,Spray,32 oz,1

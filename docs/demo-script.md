@@ -4,11 +4,11 @@
 
 1. **Problem (30s)** — Small stores spend hours cleaning supplier spreadsheets. ShelfReady imports, enriches from barcode evidence, escalates conflicts, publishes, and verifies — not a chatbot that only recommends.
 
-2. **Try demo catalog (30s)** — Home → **Try demo catalog**. Show ~10 household rows with real UPCs and documented demo scenarios (`fixtures/demo_catalog.md`).
+2. **Try demo catalog (30s)** — Operator workspace → **Try demo catalog**. Show household rows with real UPCs and documented demo scenarios (`fixtures/demo_catalog.md`). The public shop at `/store` shows only the curated, published listings.
 
 3. **Prepare products (45s)** — **Prepare products**. Open **Run activity** — tool actions include `lookup_product_identifier`. Batch summary shows ready / needs information / conflicts.
 
-4. **Workbench (60s)** — Open **HC-COKE-01**: sparse supplier row enriched from replay barcode evidence (labeled **replay fixture**). Open **HC-COKE-02**: “Supplier says Black. The barcode record says Red.” Resolve the variant conflict in the drawer.
+4. **Workbench (60s)** — Open **HC-COKE-01**: sparse supplier title/brand enriched from replay barcode evidence (labeled **replay fixture**), with a soda-can demonstration illustration. Open **HC-COKE-02**: “Supplier says Black. The barcode record says Red.” Resolve the variant conflict in the drawer.
 
 5. **Missing price (30s)** — **HC-NOPRICE-01**: enter price in drawer (no “Approve null” path).
 

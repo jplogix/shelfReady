@@ -302,6 +302,9 @@ class ProductImage(Base):
     )
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
     classification_source: Mapped[str] = mapped_column(String(50), default="unknown")
+    source_kind: Mapped[str] = mapped_column(String(50), default="unknown", nullable=False)
+    usage_permission: Mapped[str] = mapped_column(String(50), default="unknown", nullable=False)
+    suitability: Mapped[str] = mapped_column(String(50), default="unclassified", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     product: Mapped[Product] = relationship(back_populates="images")
