@@ -169,9 +169,17 @@ export function ProductDrawer({
               <StatusBadge status={product.status} />
             </div>
           </div>
-          <button type="button" onClick={onClose} className="rounded border border-line px-3 py-1.5 text-sm">
-            Close
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/products/${product.id}`}
+              className="rounded border border-green bg-green px-3 py-1.5 text-sm font-semibold text-white hover:bg-charcoal"
+            >
+              View full transformation
+            </Link>
+            <button type="button" onClick={onClose} className="rounded border border-line px-3 py-1.5 text-sm">
+              Close
+            </button>
+          </div>
         </header>
 
         <div className="flex border-b border-line px-6">

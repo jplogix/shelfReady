@@ -32,5 +32,11 @@ test.describe("ShelfReady Seiko preparation", () => {
     await reviewIssues.click();
     await expect(page.getByText("Product workspace")).toBeVisible();
     await expect(page.getByRole("button", { name: "Evidence & decisions" })).toHaveClass(/border-charcoal/);
+    const transformation = page.getByRole("link", { name: "View full transformation" });
+    await expect(transformation).toBeVisible();
+    await transformation.click();
+    await expect(page.getByText("Product workbench")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Original supplier record" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Proposed listing" })).toBeVisible();
   });
 });
