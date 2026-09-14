@@ -6,6 +6,8 @@ ShelfReady is an AI product-onboarding agent for small e-commerce teams. It impo
 
 This is a hackathon MVP for [Agents for Humans](https://agentsforhumans.devpost.com/). The agent uses the [Strands Agents SDK](https://strandsagents.com/) meaningfully; credentials stay server-side.
 
+**Live demonstration:** [shelfready.svgfy.com](https://shelfready.svgfy.com)
+
 ## Architecture
 
 See [docs/architecture.md](docs/architecture.md).
@@ -14,7 +16,7 @@ See [docs/architecture.md](docs/architecture.md).
 apps/web          Next.js operator UI + demo storefront
 services/api      FastAPI, Strands agent, worker, SQLAlchemy/Alembic
 packages/contracts  Shared notes (OpenAPI is source of truth)
-fixtures          Synthetic supplier CSV, images, expectations
+fixtures          Supplier CSVs, replay evidence, demo images, expectations
 docs              Architecture, demo script, limitations, AgentCore guide
 ```
 
@@ -113,10 +115,10 @@ MIT — see [LICENSE](LICENSE).
 
 ## Disclosure
 
-This repository is original work created for the Agents for Humans hackathon. It does not copy application code from other commerce projects. Fixture brands and images are synthetic.
+This repository is original work created for the Agents for Humans hackathon. It does not copy application code from other commerce projects. Household and stress-test fixtures use synthetic brands and demonstration-only illustrations. The curated Seiko demonstration uses factual product records and manufacturer-hosted product images; commercial republication permission for those images has not been independently established, and the application labels them `demo_storefront_only`.
 
 ## What is not claimed
 
 - The demo storefront is **not** Shopify/Medusa and is **not** indexed for SEO ranking.
 - Replay mode is **not** a live model integration.
-- No public deployment is included; AgentCore steps are documented but not executed without authorization.
+- The public deployment is an isolated demonstration environment, not a production commerce system. AgentCore steps are documented but have not been deployed.
