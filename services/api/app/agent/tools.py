@@ -169,8 +169,12 @@ def inspect_product_images(product_id: str) -> dict[str, Any]:
 
 
 def propose_product_patch(product_id: str, patch_json: str) -> dict[str, Any]:
-    """Apply a proposed field patch creating a new product version. Price/stock patches need approval."""
+    """Apply an allowlisted proposed field patch. Price/stock/identifiers are rejected."""
     import json
+
+    from app.agent.evidence import ALLOWLISTED_FIELDS, FORBIDDEN_AUTOFILL_FIELDS, EvidenceValidationError
+    from app.agent.schemas import ProductPatchProposal
+    from app.agent.apply import apply_patch_proposal
 
     ctx = get_ctx()
     product = ctx.db.get(Product, uuid.UUID(product_id))
@@ -181,44 +185,52 @@ def propose_product_patch(product_id: str, patch_json: str) -> dict[str, Any]:
     current = ctx.db.get(ProductVersion, product.current_version_id)
     assert current
     patch = json.loads(patch_json) if isinstance(patch_json, str) else patch_json
-    proposed = {**current.proposed, **patch}
-    version = ProductVersion(
-        id=uuid.uuid4(),
-        product_id=product.id,
-        version_number=current.version_number + 1,
-        original=current.original,
-        proposed=proposed,
-        seo=current.seo,
-        diffs=[{"field": k, "original": current.proposed.get(k), "proposed": v} for k, v in patch.items()],
-        provenance={**current.provenance, "patch": "agent_or_operator"},
-        is_publishable=False,
-        blockers=current.blockers,
-    )
-    db = ctx.db
-    db.add(version)
-    db.flush()
-    product.current_version_id = version.id
-    product.approved_version_id = None  # invalidate stale approval
-    if any(k in patch for k in ("price", "stock", "currency")):
-        d = Decision(
-            id=uuid.uuid4(),
-            workspace_id=product.workspace_id,
-            batch_id=product.batch_id,
-            product_id=product.id,
-            product_version_id=version.id,
-            kind=DecisionKind.price_change if "price" in patch else DecisionKind.inventory_change,
-            status=DecisionStatus.pending,
-            field_name="price" if "price" in patch else "stock",
-            original_value={k: current.proposed.get(k) for k in patch},
-            proposed_value=patch,
-            evidence={"policy": "price_inventory_requires_approval"},
-            reason="Price or inventory changes require explicit approval.",
-            consequence="Approve to accept the new values for this version.",
-            risk_tier="approval",
-        )
-        db.add(d)
-        product.status = ProductStatus.needs_review
-    out = {"product_id": product_id, "version_id": str(version.id), "patch": patch}
+    if not isinstance(patch, dict):
+        out = {"error": "invalid_patch"}
+        ctx.log("propose_product_patch", {"product_id": product_id}, out, success=False)
+        return out
+    evidence_ids = patch.pop("evidence_references", None) or patch.pop("evidence_ids", None) or []
+    if isinstance(evidence_ids, str):
+        evidence_ids = [evidence_ids]
+    forbidden = set(patch) & FORBIDDEN_AUTOFILL_FIELDS
+    if forbidden:
+        out = {"error": "forbidden_fields", "fields": sorted(forbidden)}
+        ctx.log("propose_product_patch", {"product_id": product_id, "patch": patch}, out, success=False)
+        return out
+    unknown = set(patch) - ALLOWLISTED_FIELDS
+    if unknown:
+        out = {"error": "field_not_allowed", "fields": sorted(unknown)}
+        ctx.log("propose_product_patch", {"product_id": product_id, "patch": patch}, out, success=False)
+        return out
+    applied: list[dict[str, Any]] = []
+    current_version = current
+    try:
+        for field, value in patch.items():
+            proposal = ProductPatchProposal(
+                field=field,  # type: ignore[arg-type]
+                proposed_value=value,
+                unresolved=value is None,
+                evidence_references=[str(x) for x in evidence_ids],
+                explanation="Agent-proposed allowlisted correction",
+            )
+            applied.append(
+                apply_patch_proposal(
+                    ctx.db,
+                    product,
+                    current_version,
+                    proposal,
+                    expected_version_id=current_version.id,
+                )
+            )
+            product = ctx.db.get(Product, product.id)
+            assert product and product.current_version_id
+            current_version = ctx.db.get(ProductVersion, product.current_version_id)
+            assert current_version
+    except (EvidenceValidationError, ValueError) as exc:
+        out = {"error": "evidence_validation_failed", "detail": str(exc)}
+        ctx.log("propose_product_patch", {"product_id": product_id, "patch": patch}, out, success=False)
+        return out
+    out = {"product_id": product_id, "version_id": str(current_version.id), "applied": applied}
     ctx.log("propose_product_patch", {"product_id": product_id, "patch": patch}, out)
     return out
 
@@ -306,6 +318,7 @@ def lookup_product_identifier(product_id: str) -> dict[str, Any]:
     from pathlib import Path
 
     from app.config import get_settings
+    from app.policy.identifiers import pick_lookup_identifier
 
     ctx = get_ctx()
     product = ctx.db.get(Product, uuid.UUID(product_id))
@@ -315,6 +328,18 @@ def lookup_product_identifier(product_id: str) -> dict[str, Any]:
         return out
     version = ctx.db.get(ProductVersion, product.current_version_id)
     assert version
+    _field_name, raw_id = pick_lookup_identifier(version.original or {})
+    brand = (version.original or {}).get("brand")
+    mpn = (version.original or {}).get("mpn") or (version.original or {}).get("model")
+    if not raw_id and not (brand and mpn and len(str(mpn).strip()) >= 3):
+        out = {
+            "product_id": product_id,
+            "skipped": True,
+            "reason": "no_useful_identifier",
+            "evidence_count": 0,
+        }
+        ctx.log("lookup_product_identifier", {"product_id": product_id}, out, evidence="skipped: no identifier")
+        return out
     settings = get_settings()
     fixtures = settings.fixtures_root
     if not fixtures.is_absolute():
@@ -452,9 +477,17 @@ def record_run_summary(summary: str, metrics_json: str = "{}") -> dict[str, Any]
     return out
 
 
-def run_deterministic_processing(ctx: ToolContext) -> dict[str, Any]:
-    """Core processing used by both replay and as the first stage before live agent."""
-    products = ctx.db.scalars(select(Product).where(Product.batch_id == ctx.batch.id)).all()
+def run_deterministic_processing(
+    ctx: ToolContext,
+    *,
+    enrich: bool = True,
+    product_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Deterministic parse/normalize/validate. Enrichment is optional (replay only by default)."""
+    q = select(Product).where(Product.batch_id == ctx.batch.id)
+    if product_ids:
+        q = q.where(Product.id.in_([uuid.UUID(pid) for pid in product_ids]))
+    products = ctx.db.scalars(q).all()
     originals = []
     for p in products:
         # use import-linked original from first version or rebuild from proposed empty
@@ -519,8 +552,10 @@ def run_deterministic_processing(ctx: ToolContext) -> dict[str, Any]:
         )
         if p.current_version_id:
             v = ctx.db.get(ProductVersion, p.current_version_id)
-            if v:
+            if v and enrich:
                 enrich_product(ctx.db, p, v, original, provider, budget)
+                refresh_product_readiness(ctx.db, p)
+            elif v:
                 refresh_product_readiness(ctx.db, p)
             if v and v.seo.get("url_slug"):
                 slugs.add(v.seo["url_slug"])

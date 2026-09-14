@@ -26,12 +26,13 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-shelfready}:${POSTGRES_PASSWORD:-shelfready}@postgres:5432/${POSTGRES_DB:-shelfready}
-      SHELFREADY_API_TOKEN: ${SHELFREADY_API_TOKEN:-dev-token-change-me}
+      ENVIRONMENT: production
+      SHELFREADY_API_TOKEN: ${SHELFREADY_API_TOKEN:?SHELFREADY_API_TOKEN must be set}
       AGENT_MODE: ${AGENT_MODE:-replay}
       LOOKUP_PROVIDER: ${LOOKUP_PROVIDER:-replay}
       FIXTURES_ROOT: /app/fixtures
       STORAGE_ROOT: /app/storage
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be the public web origin, not a localhost default}
       AWS_REGION: ${AWS_REGION:-us-west-2}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
@@ -61,7 +62,8 @@ services:
     command: ["python", "-m", "app.worker"]
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-shelfready}:${POSTGRES_PASSWORD:-shelfready}@postgres:5432/${POSTGRES_DB:-shelfready}
-      SHELFREADY_API_TOKEN: ${SHELFREADY_API_TOKEN:-dev-token-change-me}
+      ENVIRONMENT: production
+      SHELFREADY_API_TOKEN: ${SHELFREADY_API_TOKEN:?SHELFREADY_API_TOKEN must be set}
       AGENT_MODE: ${AGENT_MODE:-replay}
       LOOKUP_PROVIDER: ${LOOKUP_PROVIDER:-replay}
       FIXTURES_ROOT: /app/fixtures
@@ -82,15 +84,15 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
-        NEXT_PUBLIC_API_TOKEN: ${NEXT_PUBLIC_API_TOKEN:-dev-token-change-me}
     restart: unless-stopped
     depends_on:
       api:
         condition: service_started
     environment:
+      NODE_ENV: production
       INTERNAL_API_URL: http://api:8000
+      API_TOKEN: ${SHELFREADY_API_TOKEN:?SHELFREADY_API_TOKEN must be set}
+      OPERATOR_ACCESS_TOKEN: ${OPERATOR_ACCESS_TOKEN:-}
     expose:
       - "3000"
     networks:

@@ -49,6 +49,8 @@ def test_mode_labeled_replay(client):
     body = r.json()
     assert body["is_replay"] is True
     assert "replay" in body["label"].lower()
+    assert body["lookup_mode"] == "replay"
+    assert body["lookup_is_replay"] is True
 
 
 def test_end_to_end_sample_process_decisions_publish(client):
@@ -240,7 +242,7 @@ def test_live_mode_failure_does_not_silent_replay(monkeypatch, client):
     """When AGENT_MODE=live and Bedrock init fails, job fails — no silent replay."""
     from app.agent import runner as runner_mod
 
-    def boom():
+    def boom(*_args, **_kwargs):
         raise RuntimeError("bedrock unavailable")
 
     monkeypatch.setattr(runner_mod, "_build_strands_agent", boom)
@@ -286,7 +288,11 @@ def test_live_mode_failure_does_not_silent_replay(monkeypatch, client):
         from app.agent.runner import run_live
 
         # Force pending=0 by not calling preprocess — patch run_deterministic_processing
-        monkeypatch.setattr(runner_mod, "run_deterministic_processing", lambda c: {"processed": 0, "pending_decisions": 0})
+        monkeypatch.setattr(
+            runner_mod,
+            "run_deterministic_processing",
+            lambda *a, **k: {"processed": 0, "pending_decisions": 0},
+        )
         with pytest.raises(Exception):
             run_live(ctx)
         assert job.status.value == "failed" or "Failed" in (job.error or "") or job.error

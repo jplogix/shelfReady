@@ -38,7 +38,22 @@ def test_approve_null_missing_price_rejected(client):
     from app.db.models import Job, JobStatus
     from sqlalchemy import select
 
+    db = SessionLocal()
+    try:
+        from app.db.models import Job, JobStatus
+        from sqlalchemy import select
+
+        for j in db.scalars(
+            select(Job).where(Job.status.in_([JobStatus.pending, JobStatus.running]))
+        ).all():
+            j.status = JobStatus.failed
+            j.error = "cleared_for_test"
+        db.commit()
+    finally:
+        db.close()
+
     pr = client.post(f"/api/batches/{batch_id}/process", headers=AUTH)
+    assert pr.status_code == 200, pr.text
     job_id = pr.json()["id"]
     db = SessionLocal()
     try:

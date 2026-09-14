@@ -10,7 +10,8 @@ This pass delivers a convincing vertical slice: barcode enrichment with field-le
 - Migration `0003_enrichment_evidence`: `field_evidence`, `lookup_cache`, product `readiness`/`supplier_sku`/`store_slug`, batch `batch_kind`, new decision kinds
 - CSV import: optional `gtin`, `upc`, `ean`, `mpn`, `model`, `size`, `pack_quantity` (leading zeros preserved)
 - `app/enrichment/`: UPCitemdb adapter, replay fixtures, compare/match logic, budget/cache/dedup
-- Strands tool `lookup_product_identifier`; deterministic enrichment during processing
+- Strands tool `lookup_product_identifier`; deterministic enrichment during replay processing
+- Live path uses `structured_output_model` (`ProductAssessment`, `ProductPatchProposal`, `ListingDraft`) and consumes `result.structured_output` after evidence validation
 - Removed auto-generated **publication** decision cards; batch publish binds `approved_version_id` per selected product revision
 - Approve-null guard for missing required values
 - Batch counts: ready / needs information / conflicts / published / verified / issues

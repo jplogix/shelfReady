@@ -130,11 +130,11 @@ def main() -> int:
             [
                 f"POSTGRES_PASSWORD={postgres_password}",
                 f"SHELFREADY_API_TOKEN={token}",
-                f"NEXT_PUBLIC_API_TOKEN={token}",
+                f"OPERATOR_ACCESS_TOKEN={token}",
                 "AGENT_MODE=replay",
                 "LOOKUP_PROVIDER=replay",
-                "CORS_ORIGINS=http://localhost:3000",
-                "NEXT_PUBLIC_API_URL=http://localhost:8000",
+                "ENVIRONMENT=production",
+                "CORS_ORIGINS=https://your-public-web-origin.example",
             ]
         )
         api(

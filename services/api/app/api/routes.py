@@ -69,6 +69,7 @@ from app.services.csv_import import (
 from app.storage.local import LocalStorage, StorageError
 
 router = APIRouter(dependencies=[Depends(require_auth)])
+public_router = APIRouter()
 
 
 def get_workspace(db: Session) -> Workspace:
@@ -78,16 +79,33 @@ def get_workspace(db: Session) -> Workspace:
     return ws
 
 
-@router.get("/mode", response_model=ModeResponse)
-def get_mode() -> ModeResponse:
+def _mode_response() -> ModeResponse:
     settings = get_settings()
-    mode = settings.agent_mode
+    agent = settings.agent_mode
+    lookup = settings.lookup_provider
+    if agent == "replay":
+        label = "Fixture replay mode"
+        if lookup == "replay":
+            label = "Fixture replay · replay lookup"
+    else:
+        label = "Live agent mode"
+        if lookup == "replay":
+            label = "Live agent · replay lookup"
+        else:
+            label = "Live agent · live lookup"
     return ModeResponse(
-        agent_mode=mode,
-        label="Fixture replay mode" if mode == "replay" else "Live agent mode",
-        is_replay=mode == "replay",
-        is_live=mode == "live",
+        agent_mode=agent,
+        lookup_mode=lookup,
+        label=label,
+        is_replay=agent == "replay",
+        is_live=agent == "live",
+        lookup_is_replay=lookup == "replay",
     )
+
+
+@public_router.get("/mode", response_model=ModeResponse)
+def get_mode() -> ModeResponse:
+    return _mode_response()
 
 
 @router.get("/workspace", response_model=WorkspaceOut)
@@ -556,6 +574,41 @@ def resolve_decision(
     batch = db.get(Batch, decision.batch_id)
     if batch:
         recompute_batch_counts(db, batch)
+
+    if decision.product_id:
+        remaining = db.scalars(
+            select(Decision).where(
+                Decision.product_id == decision.product_id,
+                Decision.status == DecisionStatus.pending,
+            )
+        ).all()
+        if not remaining:
+            from app.agent.hooks import record_agent_event
+            from app.agent.runner import enqueue_resume_job
+            from app.agent.tools import ToolContext, set_tool_context
+
+            latest = db.scalars(
+                select(Job).where(Job.batch_id == decision.batch_id).order_by(Job.created_at.desc())
+            ).first()
+            agent_mode = latest.agent_mode if latest else get_settings().agent_mode
+            # Replay already applied the edit in this request. Live needs the agent
+            # to continue with updated DB context for the affected product only.
+            if agent_mode == "live":
+                resume = enqueue_resume_job(
+                    db, batch, [str(decision.product_id)], agent_mode=agent_mode
+                )
+                if resume and latest:
+                    ctx = ToolContext(db, latest, batch)
+                    set_tool_context(ctx)
+                    try:
+                        record_agent_event(
+                            "resumed",
+                            product_id=str(decision.product_id),
+                            detail=f"decision {decision.id} resolved → resume {resume.id}",
+                        )
+                    finally:
+                        set_tool_context(None)
+
     db.commit()
     db.refresh(decision)
     return decision
@@ -604,11 +657,13 @@ def list_actions(job_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Agent
     )
 
 
+@public_router.get("/store/products", response_model=list[StoreProductOut])
 @router.get("/store/products", response_model=list[StoreProductOut])
 def store_list(db: Session = Depends(get_db)) -> list[StoreProduct]:
     return list(db.scalars(select(StoreProduct).order_by(StoreProduct.title)).all())
 
 
+@public_router.get("/store/products/{slug}", response_model=StoreProductOut)
 @router.get("/store/products/{slug}", response_model=StoreProductOut)
 def store_get(slug: str, db: Session = Depends(get_db)) -> StoreProduct:
     sp = db.scalar(select(StoreProduct).where(StoreProduct.slug == slug))

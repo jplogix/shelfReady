@@ -4,12 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL !== undefined
-    ? process.env.NEXT_PUBLIC_API_URL
-    : "http://localhost:8000";
-const TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || "dev-token-change-me";
-
 export default function ImportPage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
@@ -24,25 +18,8 @@ export default function ImportPage() {
     if (!file) return;
     setError(null);
     try {
-      const createRes = await fetch(`${API_URL}/api/batches`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name: file.name, supplier_name: "Uploaded supplier" }),
-      });
-      if (!createRes.ok) throw new Error(await createRes.text());
-      const created = await createRes.json();
-      const fd = new FormData();
-      fd.append("file", file);
-      const up = await fetch(`${API_URL}/api/batches/${created.id}/upload`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${TOKEN}` },
-        body: fd,
-      });
-      if (!up.ok) throw new Error(await up.text());
-      const body = await up.json();
+      const created = await api.createBatch(file.name, "Uploaded supplier");
+      const body = await api.uploadCsv(created.id, file);
       setBatchId(created.id);
       setMapping(body.mapping);
       setHeaders(body.headers);
@@ -56,15 +33,7 @@ export default function ImportPage() {
   async function commit() {
     if (!batchId) return;
     try {
-      const res = await fetch(`${API_URL}/api/batches/${batchId}/import`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ column_mapping: mapping }),
-      });
-      if (!res.ok) throw new Error(await res.text());
+      await api.importBatch(batchId, mapping);
       router.push(`/batches/${batchId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed");

@@ -16,6 +16,6 @@
 
 7. **Stress test (optional, dev view)** — **Show dev batches** → load stress-test catalog for alias/duplicate/injection cases.
 
-8. **Close (30s)** — Live mode uses Strands + Bedrock with the same tools; replay never pretends to be live. Live UPC lookups require `UPCITEMDB_API_KEY` (`docs/provider-setup.md`).
+8. **Close (30s)** — Live mode uses Strands structured assessments plus tools; replay never pretends to be live. A live model with replay lookup is labeled **Live agent · replay lookup**. Live UPC lookups require `UPCITEMDB_API_KEY` (`docs/provider-setup.md`).
 
 **Use only counts visible on screen — do not invent accuracy % or time saved.**

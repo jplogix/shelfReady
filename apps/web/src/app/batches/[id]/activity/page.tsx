@@ -62,6 +62,12 @@ export default function ActivityPage() {
               <span className={a.success ? "text-green" : "text-red"}>
                 {a.success ? "ok" : "failed"}
               </span>
+              {typeof a.output_payload?.duration_ms === "number" && (
+                <span className="text-xs text-ink-muted">{a.output_payload.duration_ms}ms</span>
+              )}
+              {typeof a.input_payload?.product_id === "string" && a.input_payload.product_id && (
+                <span className="text-xs text-ink-muted">product {a.input_payload.product_id.slice(0, 8)}</span>
+              )}
               {a.evidence_summary && <span className="text-ink-muted">{a.evidence_summary}</span>}
             </div>
             <pre className="mt-2 max-h-40 overflow-auto rounded bg-bg p-2 text-xs text-ink-muted">

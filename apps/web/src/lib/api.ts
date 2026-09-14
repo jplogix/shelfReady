@@ -1,8 +1,4 @@
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL !== undefined
-    ? process.env.NEXT_PUBLIC_API_URL
-    : "http://localhost:8000";
-const TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || "dev-token-change-me";
+const API_URL = "";
 
 export class ApiError extends Error {
   status: number;
@@ -14,11 +10,10 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set("Authorization", `Bearer ${TOKEN}`);
   if (init.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers, cache: "no-store" });
+  const res = await fetch(`${API_URL}${path}`, { ...init, headers, cache: "no-store", credentials: "same-origin" });
   if (!res.ok) {
     const text = await res.text();
     throw new ApiError(res.status, text || res.statusText);
@@ -29,9 +24,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export type ModeInfo = {
   agent_mode: string;
+  lookup_mode: string;
   label: string;
   is_replay: boolean;
   is_live: boolean;
+  lookup_is_replay: boolean;
 };
 
 export type Batch = {
@@ -165,6 +162,25 @@ export const api = {
   batch: (id: string) => request<Batch>(`/api/batches/${id}`),
   loadSample: () => request<Batch>("/api/demo/load-sample", { method: "POST" }),
   loadDemo: () => request<Batch>("/api/demo/load-demo", { method: "POST" }),
+  createBatch: (name: string, supplier_name: string) =>
+    request<Batch>("/api/batches", { method: "POST", body: JSON.stringify({ name, supplier_name }) }),
+  uploadCsv: async (batchId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{
+      mapping: Record<string, string | null>;
+      headers: string[];
+      preview_rows: Record<string, string>[];
+    }>(`/api/batches/${batchId}/upload`, { method: "POST", body: fd });
+  },
+  importBatch: (batchId: string, column_mapping: Record<string, string | null>) =>
+    request<Batch>(`/api/batches/${batchId}/import`, {
+      method: "POST",
+      body: JSON.stringify({ column_mapping }),
+    }),
+  session: () => request<{ authenticated: boolean }>("/api/session"),
+  unlock: (token: string) =>
+    request<{ authenticated: boolean }>("/api/session", { method: "POST", body: JSON.stringify({ token }) }),
   process: (id: string) => request<Job>(`/api/batches/${id}/process`, { method: "POST" }),
   publish: (id: string, productIds: string[]) =>
     request<Job>(`/api/batches/${id}/publish`, {
@@ -212,7 +228,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ store_product_id, quantity: 1, purpose: "operator" }),
     }),
-  mediaUrl: (path: string) => `${API_URL}/api/media/${path}`,
+  mediaUrl: (path: string) => `/api/media/${path}`,
 };
 
 export function statusColor(status: string): string {

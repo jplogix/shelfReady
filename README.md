@@ -23,9 +23,12 @@ docs              Architecture, demo script, limitations, AgentCore guide
 | Mode | Env | Behavior |
 |------|-----|----------|
 | **Fixture replay** | `AGENT_MODE=replay` | Deterministic path through the same validation, decisions, publish, and verify services. **Visibly labeled** in the UI. No model calls. |
-| **Live agent** | `AGENT_MODE=live` | Strands + Amazon Bedrock with real tools. |
+| **Live agent** | `AGENT_MODE=live` | Strands + Amazon Bedrock. Per product: inspect, optional lookup, structured `ProductAssessment`, then consume that assessment. |
+| **Lookup** | `LOOKUP_PROVIDER=replay\|upcitemdb` | Independent of agent mode. A live agent with replay lookup is labeled **Live agent · replay lookup**. |
 
 **Never** silently falls back from a failed live model call into replay mode. Live failures mark the job `failed`.
+
+Operator writes go through the Next.js same-origin BFF. The API token is server-only (`API_TOKEN` / `SHELFREADY_API_TOKEN`). Do not set `NEXT_PUBLIC_API_TOKEN`. Storefront product reads are public. Production API/worker require `ENVIRONMENT=production` and a non-localhost `DATABASE_URL`.
 
 ## Prerequisites
 
@@ -51,6 +54,7 @@ pip install -e ".[dev]"
 export DATABASE_URL=postgresql+psycopg://shelfready:shelfready@localhost:55433/shelfready
 export SHELFREADY_API_TOKEN=dev-token-change-me
 export AGENT_MODE=replay
+export LOOKUP_PROVIDER=replay
 export STORAGE_ROOT="$(pwd)/../../storage"
 export FIXTURES_ROOT="$(pwd)/../../fixtures"
 alembic upgrade head
@@ -71,8 +75,9 @@ In a third terminal (web):
 
 ```bash
 cd apps/web
-cp ../../.env.example ../../.env  # if needed
-# apps/web/.env.local already points at localhost:8000
+# Browser calls same-origin /api. The Next.js server uses INTERNAL_API_URL + API_TOKEN.
+export INTERNAL_API_URL=http://127.0.0.1:8000
+export API_TOKEN=dev-token-change-me
 npm install
 npm run dev
 ```

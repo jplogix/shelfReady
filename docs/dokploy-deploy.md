@@ -32,12 +32,10 @@ POSTGRES_USER=shelfready
 POSTGRES_PASSWORD=<strong-password>
 POSTGRES_DB=shelfready
 
-# API auth — use the same token for web + API
+# API auth — server-only. Never NEXT_PUBLIC_API_TOKEN.
+ENVIRONMENT=production
 SHELFREADY_API_TOKEN=<random-token>
-NEXT_PUBLIC_API_TOKEN=<same-as-above>
-
-# Public URLs (set after domains are assigned in step 4)
-NEXT_PUBLIC_API_URL=https://api.yourdomain.com
+OPERATOR_ACCESS_TOKEN=<same-or-separate-operator-unlock>
 CORS_ORIGINS=https://app.yourdomain.com
 
 # Demo mode (no AWS/Bedrock required)
@@ -55,7 +53,7 @@ AWS_SECRET_ACCESS_KEY=
 BEDROCK_MODEL_ID=global.anthropic.claude-sonnet-4-6
 ```
 
-**Important:** `NEXT_PUBLIC_*` values are baked in at **build** time. After changing them, redeploy/rebuild the `web` service.
+The web container talks to the API over the compose network (`INTERNAL_API_URL=http://api:8000`) and injects `API_TOKEN` on the server. The browser never receives the write token. Production compose fails if `SHELFREADY_API_TOKEN` or `CORS_ORIGINS` is missing. Do not point `DATABASE_URL` at localhost.
 
 ## 4. Domains (Traefik)
 
@@ -70,10 +68,9 @@ Enable HTTPS (Let's Encrypt) on both.
 
 Then update env vars to match:
 
-- `NEXT_PUBLIC_API_URL=https://api.yourdomain.com`
 - `CORS_ORIGINS=https://app.yourdomain.com`
 
-Redeploy so the web image rebuilds with the correct API URL.
+The API remains separately hosted from the public web origin. Redeploy after changing server env.
 
 ## 5. Deploy
 
@@ -118,7 +115,7 @@ docker compose -f docker-compose.prod.yml up --build
 | Web shows API errors | Check `NEXT_PUBLIC_API_URL` matches public API domain; rebuild web |
 | CORS errors | Add web origin to `CORS_ORIGINS`; redeploy API |
 | Jobs stuck pending | Confirm `worker` container is running |
-| 401 on API calls | Align `SHELFREADY_API_TOKEN` and `NEXT_PUBLIC_API_TOKEN` |
+| 401 on operator writes | Set `OPERATOR_ACCESS_TOKEN` and unlock in the web header, or confirm `API_TOKEN` on the Next.js server |
 
 ## Vercel frontend only
 

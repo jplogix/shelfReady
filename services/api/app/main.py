@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app.api.routes import router
+from app.api.routes import public_router, router
 from app.config import get_settings
 from app.storage.local import LocalStorage
 
@@ -22,6 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(public_router, prefix="/api")
 app.include_router(router, prefix="/api")
 
 

@@ -10,9 +10,11 @@ from pydantic import BaseModel, Field
 
 class ModeResponse(BaseModel):
     agent_mode: str
+    lookup_mode: str
     label: str
     is_replay: bool
     is_live: bool
+    lookup_is_replay: bool
 
 
 class WorkspaceOut(BaseModel):

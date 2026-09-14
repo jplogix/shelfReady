@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || "dev-token-change-me";
+const API = process.env.E2E_API_URL || process.env.INTERNAL_API_URL || "http://localhost:8000";
+const TOKEN = process.env.SHELFREADY_API_TOKEN || process.env.E2E_API_TOKEN || "dev-token-change-me";
 
 async function waitForJob(jobId: string) {
   for (let i = 0; i < 60; i++) {

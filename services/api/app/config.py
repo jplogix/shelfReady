@@ -2,6 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    environment: Literal["development", "production"] = "development"
     database_url: str = "postgresql+psycopg://shelfready:shelfready@localhost:55433/shelfready"
     shelfready_api_token: str = "dev-token-change-me"
     agent_mode: Literal["live", "replay"] = "replay"
@@ -33,6 +35,23 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @model_validator(mode="after")
+    def reject_production_localhost(self) -> "Settings":
+        if self.environment != "production":
+            return self
+        host = self.database_url.lower()
+        if "localhost" in host or "127.0.0.1" in host:
+            raise ValueError(
+                "Production DATABASE_URL must not use localhost or 127.0.0.1. "
+                "Point it at the separately hosted Postgres instance."
+            )
+        if self.shelfready_api_token in {"", "dev-token-change-me"}:
+            raise ValueError(
+                "Production SHELFREADY_API_TOKEN must be set to a non-default secret. "
+                "Do not expose it as NEXT_PUBLIC_API_TOKEN."
+            )
+        return self
 
 
 @lru_cache

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
@@ -17,20 +18,24 @@ logger = logging.getLogger("shelfready.worker")
 
 
 def claim_next_job() -> uuid.UUID | None:
+    """Atomically claim one pending job. Skip locked rows so workers cannot share a job."""
     db = SessionLocal()
     try:
+        running = db.scalar(select(Job).where(Job.status == JobStatus.running).limit(1))
+        if running:
+            return None
         job = db.scalar(
             select(Job)
             .where(Job.status == JobStatus.pending)
             .order_by(Job.created_at.asc())
+            .with_for_update(skip_locked=True)
             .limit(1)
         )
         if not job:
             return None
-        # Single-batch MVP: also skip if another job is running
-        running = db.scalar(select(Job).where(Job.status == JobStatus.running).limit(1))
-        if running:
-            return None
+        job.status = JobStatus.running
+        job.started_at = datetime.now(timezone.utc)
+        db.commit()
         return job.id
     finally:
         db.close()
@@ -44,7 +49,6 @@ def recover_stuck_running() -> None:
         for job in stuck:
             logger.warning("Re-queueing interrupted job %s", job.id)
             job.status = JobStatus.pending
-            # Keep checkpoint for resume
             if job.job_type == "process":
                 job.job_type = "resume"
         db.commit()
@@ -53,6 +57,9 @@ def recover_stuck_running() -> None:
 
 
 def main() -> None:
+    from app.config import get_settings
+
+    get_settings()  # fail fast on invalid production config
     logger.info("ShelfReady worker starting")
     recover_stuck_running()
     while True:
