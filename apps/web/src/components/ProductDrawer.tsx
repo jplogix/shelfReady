@@ -40,12 +40,39 @@ function DecisionActions({
     }
   }
 
+  const isImage =
+    decision.field_name === "primary_image" && typeof decision.evidence?.preview_path === "string";
+  const preview = isImage ? String(decision.evidence.preview_path) : null;
+
   return (
     <div className="rounded border border-line bg-bg p-3 text-sm">
       <div className="mb-1 flex flex-wrap gap-2">
         <span className="rounded bg-line px-2 py-0.5 text-xs">{decision.kind.replace(/_/g, " ")}</span>
         <span className="text-xs text-ink-muted">{decision.risk_tier}</span>
       </div>
+      {preview && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={api.mediaUrl(preview)} alt="Retrieved product photograph" className="mb-2 aspect-square max-h-48 w-full object-contain bg-bg" />
+      )}
+      {isImage && (
+        <dl className="mb-2 grid gap-1 text-xs text-ink-muted">
+          <div>Model: {String(decision.evidence.manufacturer_reference || "")}</div>
+          {typeof decision.evidence.source_page === "string" && (
+            <div>
+              Source:{" "}
+              <a className="underline" href={decision.evidence.source_page} target="_blank" rel="noreferrer">
+                manufacturer page
+              </a>
+            </div>
+          )}
+          <div>Retrieved: {String(decision.evidence.retrieved_at || "")}</div>
+          <div>Match: {String(decision.evidence.match_rationale || "")}</div>
+          <div>
+            Usage: {String(decision.evidence.usage_permission || "")} · suitability{" "}
+            {String(decision.evidence.suitability || "")}
+          </div>
+        </dl>
+      )}
       <p className="font-medium">{decision.reason}</p>
       <p className="text-xs text-ink-muted">{decision.consequence}</p>
       {needsEdit && (
@@ -71,7 +98,7 @@ function DecisionActions({
             onClick={() => resolve("approve")}
             className="rounded bg-green px-2 py-1 text-xs text-white disabled:opacity-50"
           >
-            Accept correction
+            Accept {isImage ? "image" : "correction"}
           </button>
         )}
         {needsEdit && (
@@ -217,7 +244,7 @@ export function ProductDrawer({
                   <img
                     src={api.mediaUrl(product.images.find((i) => i.is_primary)?.path || product.images[0].path)}
                     alt=""
-                    className="mb-3 aspect-square max-h-48 object-cover"
+                    className="mb-3 aspect-square max-h-48 object-contain"
                   />
                 )}
                 <h3 className="text-xl text-charcoal">

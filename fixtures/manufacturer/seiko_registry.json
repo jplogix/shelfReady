@@ -1,0 +1,30 @@
+{
+  "provider": "seiko_manufacturer",
+  "allowed_hosts": ["www.seikowatches.com", "seikowatches.com"],
+  "models": {
+    "SRPD55": {
+      "source_page": "https://www.seikowatches.com/us-en/products/5sports/srpd55",
+      "replay_html": "replay/seiko/srpd55.html",
+      "replay_image": "seiko_images/originals/SRPD55K1.png",
+      "catalog_asset_code": "SRPD55K1"
+    },
+    "SRPD51": {
+      "source_page": "https://www.seikowatches.com/us-en/products/5sports/srpd51",
+      "replay_html": "replay/seiko/srpd51.html",
+      "replay_image": "seiko_images/originals/SRPD51K1.png",
+      "catalog_asset_code": "SRPD51K1"
+    },
+    "SRPD63": {
+      "source_page": "https://www.seikowatches.com/us-en/products/5sports/srpd63",
+      "replay_html": "replay/seiko/srpd63.html",
+      "replay_image": "seiko_images/originals/SRPD63K1.png",
+      "catalog_asset_code": "SRPD63K1"
+    },
+    "SRPD53": {
+      "source_page": "https://www.seikowatches.com/us-en/products/5sports/srpd53",
+      "replay_html": "replay/seiko/srpd53.html",
+      "replay_image": "seiko_images/originals/SRPD53K1.png",
+      "catalog_asset_code": "SRPD53K1"
+    }
+  }
+}

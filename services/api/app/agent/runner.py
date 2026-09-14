@@ -26,6 +26,7 @@ from app.agent.tools import (
     propose_product_patch,
     publish_product,
     record_run_summary,
+    retrieve_manufacturer_record,
     run_deterministic_processing,
     set_tool_context,
     validate_product,
@@ -136,6 +137,11 @@ def _build_strands_agent(recorder: ExecutionRecorder | None = None):
         return lookup_product_identifier(product_id)
 
     @tool
+    def tool_retrieve_manufacturer_record(product_id: str) -> dict[str, Any]:
+        """Retrieve the manufacturer page for an exact model; persist specs, image asset, and evidence IDs."""
+        return retrieve_manufacturer_record(product_id)
+
+    @tool
     def tool_record_run_summary(summary: str, metrics_json: str = "{}") -> dict[str, Any]:
         """Record concise actual outcomes for the run."""
         return record_run_summary(summary, metrics_json)
@@ -158,6 +164,7 @@ def _build_strands_agent(recorder: ExecutionRecorder | None = None):
                 tool_propose_product_patch,
                 tool_validate_product,
                 tool_lookup_product_identifier,
+                tool_retrieve_manufacturer_record,
                 tool_create_decision_request,
                 tool_record_run_summary,
             ],
@@ -176,6 +183,7 @@ def _build_strands_agent(recorder: ExecutionRecorder | None = None):
                 tool_propose_product_patch,
                 tool_validate_product,
                 tool_lookup_product_identifier,
+                tool_retrieve_manufacturer_record,
                 tool_create_decision_request,
                 tool_record_run_summary,
             ],
@@ -266,15 +274,26 @@ def assess_product_with_agent(
         if _should_lookup(version)
         else "No useful identifier is available. Do not invent research or identifiers."
     )
+    brand = str((version.original or {}).get("brand") or "")
+    model = str((version.original or {}).get("model") or "")
+    manufacturer_hint = ""
+    if "seiko" in brand.lower():
+        manufacturer_hint = (
+            " This is a Seiko supplier row. Call tool_retrieve_manufacturer_record when an exact model "
+            "exists. Persist evidence before citing it. Do not guess a model or borrow another watch's photo. "
+            "Do not claim authorization to publish."
+        )
+        if not model.strip():
+            manufacturer_hint += " Model is missing — request the manufacturer reference; do not retrieve an image."
     prompt = (
         f"Assess product {product.id} (sku={product.sku}) for run {ctx.job.id}.\n"
         f"Trusted application context (use these IDs; do not invent them):\n"
         f"- product_id={product.id}\n- run_id={ctx.job.id}\n- revision_id={version.id}\n"
         f"Lookup mode={get_settings().lookup_provider}; agent mode=live.\n"
-        f"{lookup_hint}\n"
+        f"{lookup_hint}{manufacturer_hint}\n"
         f"Current evidence snapshot: {json.dumps(evidence, default=str)[:4000]}\n"
-        "Inspect the product. If lookup is justified, call the lookup tool, then re-read evidence. "
-        "Produce a ProductAssessment using only real evidence IDs."
+        "Inspect the product. If lookup or manufacturer retrieval is justified, call those tools, then re-read evidence. "
+        "Produce a ProductAssessment using only real evidence IDs. Include product_id and input_revision_id."
     )
     assessment = _invoke_structured(
         agent, prompt, ProductAssessment, recorder=recorder, product_id=str(product.id)
@@ -301,7 +320,18 @@ def maybe_propose_and_draft(
         return
     if assessment.recommended_action == "propose_patch" and assessment.attribute_agreements:
         field = assessment.attribute_agreements[0].field_name
-        if field in {"title", "description", "brand", "category", "size", "model", "product_type"}:
+        if field in {
+            "title",
+            "description",
+            "brand",
+            "category",
+            "size",
+            "model",
+            "product_type",
+            "case_diameter",
+            "water_resistance",
+            "manufacturer_reference",
+        }:
             prompt = (
                 f"Propose one allowlisted patch for product {product.id} revision {version.id}. "
                 f"Agreed attributes: {assessment.attribute_agreements}. "

@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from app.db.models import ImageClass
 
 DEMONSTRATION_CAPTION = "Demonstration illustration · not authentic product photography"
+MANUFACTURER_DEMO_CAPTION = (
+    "Manufacturer product photograph retrieved for this isolated ShelfReady demonstration. "
+    "Not Seiko-sponsored. Commercial republication rights are not established."
+)
 
 
 @dataclass(frozen=True)
@@ -18,6 +22,20 @@ class ImageAssetMeta:
     usage_permission: str
     suitable_types: frozenset[str]
     caption: str
+    associated_model: str | None = None
+
+
+def _seiko(filename: str, model: str) -> ImageAssetMeta:
+    return ImageAssetMeta(
+        filename=filename,
+        image_class=ImageClass.product_only,
+        prefer_as_primary=True,
+        source_kind="manufacturer_product_page",
+        usage_permission="demo_storefront_only",
+        suitable_types=frozenset({"watch", "watches", "wristwatch"}),
+        caption=MANUFACTURER_DEMO_CAPTION,
+        associated_model=model,
+    )
 
 
 def _demo(filename: str, types: set[str]) -> ImageAssetMeta:
@@ -50,6 +68,10 @@ def _stress(
 
 
 IMAGE_ASSETS: dict[str, ImageAssetMeta] = {
+    "SRPD55K1.png": _seiko("SRPD55K1.png", "SRPD55"),
+    "SRPD51K1.png": _seiko("SRPD51K1.png", "SRPD51"),
+    "SRPD63K1.png": _seiko("SRPD63K1.png", "SRPD63"),
+    "SRPD53K1.png": _seiko("SRPD53K1.png", "SRPD53"),
     "demo-soda-can.png": _demo("demo-soda-can.png", {"soda", "soft drink", "beverage"}),
     "demo-toothpaste.png": _demo("demo-toothpaste.png", {"toothpaste"}),
     "demo-laundry-pods.png": _demo("demo-laundry-pods.png", {"detergent", "laundry"}),
@@ -85,9 +107,24 @@ def lookup_image_meta(filename: str | None) -> ImageAssetMeta | None:
     return None
 
 
-def suitability_for(meta: ImageAssetMeta | None, product_type: str | None, category: str | None) -> str:
+def suitability_for(
+    meta: ImageAssetMeta | None,
+    product_type: str | None,
+    category: str | None,
+    *,
+    model: str | None = None,
+) -> str:
     if meta is None:
         return "unclassified"
+    if meta.associated_model:
+        from app.policy.watch_specs import normalize_model_reference
+
+        expected = normalize_model_reference(meta.associated_model)
+        actual = normalize_model_reference(model)
+        if actual and expected and actual != expected:
+            return "model_mismatch"
+        if actual and expected and actual == expected:
+            return "source_model_match"
     haystack = f"{product_type or ''} {category or ''}".strip().lower()
     if not haystack:
         return "unclassified"

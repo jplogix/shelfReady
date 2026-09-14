@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import uuid
 
+from decimal import Decimal
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -90,10 +92,49 @@ def add_store_item(db: Session, cart: Cart, store_product: StoreProduct, quantit
     return cart
 
 
+def set_item_quantity(db: Session, cart: Cart, store_product_id: uuid.UUID, quantity: int) -> Cart:
+    item = db.scalar(
+        select(CartItem).where(CartItem.cart_id == cart.id, CartItem.store_product_id == store_product_id)
+    )
+    if not item:
+        raise HTTPException(404, "Cart item not found")
+    if quantity < 1:
+        db.delete(item)
+        db.flush()
+        return cart
+    sp = db.get(StoreProduct, store_product_id)
+    if not sp:
+        raise HTTPException(404, "Product not found")
+    if quantity > sp.stock:
+        raise HTTPException(400, "Requested quantity exceeds available stock")
+    item.quantity = quantity
+    item.unit_price = sp.price
+    item.currency = sp.currency
+    db.flush()
+    return cart
+
+
+def remove_item(db: Session, cart: Cart, store_product_id: uuid.UUID) -> Cart:
+    item = db.scalar(
+        select(CartItem).where(CartItem.cart_id == cart.id, CartItem.store_product_id == store_product_id)
+    )
+    if item:
+        db.delete(item)
+        db.flush()
+    return cart
+
+
 def cart_out(db: Session, cart: Cart) -> CartOut:
     items = []
+    subtotal = Decimal("0")
+    currency = "USD"
+    count = 0
     for it in cart.items:
         sp = db.get(StoreProduct, it.store_product_id)
+        line = (it.unit_price or Decimal("0")) * it.quantity
+        subtotal += line
+        currency = it.currency or currency
+        count += it.quantity
         items.append(
             CartItemOut(
                 id=it.id,
@@ -106,6 +147,14 @@ def cart_out(db: Session, cart: Cart) -> CartOut:
                 image=sp.primary_image_path if sp else None,
                 available=bool(sp.available) if sp else False,
                 stock=sp.stock if sp else 0,
+                line_total=line,
             )
         )
-    return CartOut(id=cart.id, purpose=cart.purpose, items=items)
+    return CartOut(
+        id=cart.id,
+        purpose=cart.purpose,
+        items=items,
+        subtotal=subtotal,
+        currency=currency,
+        item_count=count,
+    )

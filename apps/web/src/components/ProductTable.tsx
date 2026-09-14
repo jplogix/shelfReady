@@ -99,7 +99,7 @@ export function ProductTable({
                       <img
                         src={api.mediaUrl(p.thumbnail)}
                         alt=""
-                        className="h-12 w-12 rounded object-cover"
+                        className="h-12 w-12 rounded bg-bg object-contain"
                       />
                     ) : (
                       <div className="flex h-12 w-12 items-center justify-center rounded bg-line text-xs text-ink-muted">

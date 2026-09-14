@@ -120,6 +120,11 @@ export type ProductDetail = Product & {
     class: string;
     is_primary: boolean;
     classification_source: string;
+    source_kind?: string;
+    usage_permission?: string;
+    suitability?: string;
+    source_url?: string | null;
+    match_rationale?: string | null;
   }>;
   is_publishable: boolean;
   import_row_number?: number | null;
@@ -189,6 +194,8 @@ export type StoreProduct = {
   sku: string;
   image_caption?: string | null;
   image_suitability?: string | null;
+  specifications?: Array<{ field: string; value: string }>;
+  collection?: string | null;
 };
 
 export type ListingProvenance = {
@@ -220,6 +227,7 @@ export type ListingProvenance = {
   } | null;
   image_caption?: string | null;
   image_suitability?: string | null;
+  outcome_summary?: string | null;
 };
 
 export type ShopperCart = {
@@ -236,7 +244,11 @@ export type ShopperCart = {
     store_product_id: string;
     available: boolean;
     stock: number;
+    line_total?: string;
   }>;
+  subtotal?: string;
+  currency?: string;
+  item_count?: number;
 };
 
 export const api = {
@@ -247,6 +259,7 @@ export const api = {
   batch: (id: string) => request<Batch>(`/api/batches/${id}`),
   loadSample: () => request<Batch>("/api/demo/load-sample", { method: "POST" }),
   loadDemo: () => request<Batch>("/api/demo/load-demo", { method: "POST" }),
+  loadSeiko: () => request<Batch>("/api/demo/load-seiko", { method: "POST" }),
   createBatch: (name: string, supplier_name: string) =>
     request<Batch>("/api/batches", { method: "POST", body: JSON.stringify({ name, supplier_name }) }),
   uploadCsv: async (batchId: string, file: File) => {
@@ -304,6 +317,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ store_product_id, quantity, purpose: "shopper" }),
     }),
+  updateCartItem: (store_product_id: string, quantity: number) =>
+    request<ShopperCart>(`/api/store/cart/items/${store_product_id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ quantity }),
+    }),
+  removeCartItem: (store_product_id: string) =>
+    request<ShopperCart>(`/api/store/cart/items/${store_product_id}`, { method: "DELETE" }),
   mediaUrl: (path: string) => `/api/media/${path}`,
 };
 

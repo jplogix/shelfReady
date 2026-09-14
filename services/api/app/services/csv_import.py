@@ -25,6 +25,20 @@ CANONICAL_FIELDS = [
     "model",
     "size",
     "pack_quantity",
+    "collection",
+    "caliber",
+    "movement_type",
+    "power_reserve",
+    "case_material",
+    "case_diameter",
+    "case_thickness",
+    "lug_to_lug",
+    "lug_width",
+    "crystal",
+    "bracelet_material",
+    "water_resistance",
+    "weight",
+    "demo_scenario",
 ]
 
 
@@ -47,6 +61,20 @@ FIELD_ALIASES = {
     "model": ["model", "model_number", "model_no"],
     "size": ["size", "item_size", "variant_size"],
     "pack_quantity": ["pack_quantity", "pack_qty", "pack_size", "units_per_pack"],
+    "collection": ["collection"],
+    "caliber": ["caliber", "calibre"],
+    "movement_type": ["movement_type", "movement"],
+    "power_reserve": ["power_reserve"],
+    "case_material": ["case_material"],
+    "case_diameter": ["case_diameter"],
+    "case_thickness": ["case_thickness"],
+    "lug_to_lug": ["lug_to_lug"],
+    "lug_width": ["lug_width"],
+    "crystal": ["crystal"],
+    "bracelet_material": ["bracelet_material", "strap_material"],
+    "water_resistance": ["water_resistance"],
+    "weight": ["weight"],
+    "demo_scenario": ["demo_scenario", "scenario"],
 }
 
 IDENTIFIER_FIELDS = {"gtin", "upc", "ean"}

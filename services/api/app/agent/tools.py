@@ -361,6 +361,27 @@ def lookup_product_identifier(product_id: str) -> dict[str, Any]:
     return out
 
 
+def retrieve_manufacturer_record(product_id: str) -> dict[str, Any]:
+    """Retrieve the matching manufacturer page, specs, and photograph for an exact model."""
+    from app.services.manufacturer_recovery import retrieve_manufacturer_record as recover
+
+    ctx = get_ctx()
+    product = ctx.db.get(Product, uuid.UUID(product_id))
+    if not product:
+        out = {"error": "not_found"}
+        ctx.log("retrieve_manufacturer_record", {"product_id": product_id}, out, success=False)
+        return out
+    out = recover(ctx.db, product)
+    ctx.log(
+        "retrieve_manufacturer_record",
+        {"product_id": product_id},
+        {k: v for k, v in out.items() if k != "specifications"},
+        success=bool(out.get("ok")),
+        evidence=out.get("manufacturer_reference") or out.get("error"),
+    )
+    return out
+
+
 def publish_product(product_id: str) -> dict[str, Any]:
     """Publish an eligible product to the internal demo store. Enforces approvals in code."""
     ctx = get_ctx()
@@ -557,6 +578,11 @@ def run_deterministic_processing(
             v = ctx.db.get(ProductVersion, p.current_version_id)
             if v and enrich:
                 enrich_product(ctx.db, p, v, original, provider, budget)
+                from app.services.manufacturer_recovery import retrieve_manufacturer_record
+
+                if (original.get("brand") or "").lower().find("seiko") >= 0 or (original.get("model") or ""):
+                    if str(original.get("brand") or "").lower().find("seiko") >= 0:
+                        retrieve_manufacturer_record(ctx.db, p)
                 refresh_product_readiness(ctx.db, p)
             elif v:
                 refresh_product_readiness(ctx.db, p)

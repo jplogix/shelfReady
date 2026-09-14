@@ -11,8 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Cart, CartItem, Product, ProductVersion, StoreProduct, Workspace
-from app.policy.images import lookup_image_meta
+from app.policy.images import MANUFACTURER_DEMO_CAPTION, lookup_image_meta
 from app.policy.seo import build_json_ld, unique_slug
+from app.policy.watch_specs import specification_rows
 
 
 class StoreAdapter(ABC):
@@ -66,9 +67,13 @@ class DemoStoreAdapter(StoreAdapter):
                     if meta
                     else "Demonstration illustration · not authentic product photography"
                 )
+            elif img.usage_permission == "demo_storefront_only":
+                caption = MANUFACTURER_DEMO_CAPTION
             alt = seo.get("image_alt") or title
-            if caption:
+            if img.usage_permission == "demonstration_only":
                 alt = f"{title} — demonstration illustration, not authentic product photography"
+            elif img.usage_permission == "demo_storefront_only":
+                alt = f"{title} — manufacturer product photograph for demonstration"
             images.append(
                 {
                     "path": path,
@@ -84,6 +89,8 @@ class DemoStoreAdapter(StoreAdapter):
         primary = next((i for i in images if i["is_primary"]), images[0] if images else None)
         primary_path = primary["path"] if primary else None
         canonical = f"/store/products/{slug}"
+        specs = specification_rows(proposed)
+        seo = {**seo, "noindex": True, "specifications": specs, "collection": proposed.get("collection")}
         json_ld = build_json_ld(
             name=title,
             description=seo.get("short_description") or proposed.get("description"),
@@ -97,6 +104,12 @@ class DemoStoreAdapter(StoreAdapter):
         )
 
         if existing:
+            if existing.product_id != product.id:
+                previous = db.get(Product, existing.product_id)
+                if previous and previous.store_product_id == existing.id:
+                    previous.store_product_id = None
+                    previous.store_slug = None
+            existing.product_id = product.id
             existing.slug = slug
             existing.title = title
             existing.description = proposed.get("description")
@@ -107,7 +120,7 @@ class DemoStoreAdapter(StoreAdapter):
             existing.available = available
             existing.primary_image_path = primary_path
             existing.images = images
-            existing.seo = {**seo, "noindex": True}
+            existing.seo = seo
             existing.json_ld = json_ld
             existing.variant_sku = product.sku
             db.flush()
@@ -128,7 +141,7 @@ class DemoStoreAdapter(StoreAdapter):
             available=available,
             primary_image_path=primary_path,
             images=images,
-            seo={**seo, "noindex": True},
+            seo=seo,
             json_ld=json_ld,
             variant_sku=product.sku,
         )
@@ -172,7 +185,14 @@ class DemoStoreAdapter(StoreAdapter):
             suitability = primary_meta.get("suitability") or "unclassified"
             check(
                 "image_suitability_recorded",
-                suitability in {"category_match", "category_mismatch", "unclassified"},
+                suitability
+                in {
+                    "category_match",
+                    "category_mismatch",
+                    "unclassified",
+                    "source_model_match",
+                    "model_mismatch",
+                },
                 f"suitability={suitability} source={primary_meta.get('source_kind')}",
             )
             if suitability == "category_mismatch":

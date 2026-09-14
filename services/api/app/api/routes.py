@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_auth
 from app.api.schemas import (
     AddToCartRequest,
+    UpdateCartItemRequest,
     AgentActionOut,
     BatchCreate,
     BatchOut,
@@ -73,6 +74,8 @@ from app.services.shopper_cart import (
     cart_out,
     get_or_create_cart,
     parse_cart_id,
+    remove_item,
+    set_item_quantity,
 )
 from app.storage.local import LocalStorage, StorageError
 
@@ -280,7 +283,11 @@ def commit_import(
         # Attach fixture/local image if present
         fname = mapped.get("image_filename")
         if fname:
-            for img_dir in (fixtures_root / "demo_images", fixtures_root / "images"):
+            for img_dir in (
+                fixtures_root / "seiko_images" / "originals",
+                fixtures_root / "demo_images",
+                fixtures_root / "images",
+            ):
                 src = img_dir / fname
                 if src.exists():
                     try:
@@ -294,6 +301,7 @@ def commit_import(
                             width=saved["width"],
                             height=saved["height"],
                             size_bytes=saved["size_bytes"],
+                            checksum_sha256=saved.get("sha256"),
                             position=0,
                         )
                         meta = lookup_image_meta(str(fname))
@@ -422,6 +430,9 @@ def get_product(product_id: uuid.UUID, db: Session = Depends(get_db)) -> Product
                 "source_kind": i.source_kind,
                 "usage_permission": i.usage_permission,
                 "suitability": i.suitability,
+                "source_url": i.source_url,
+                "match_rationale": i.match_rationale,
+                "checksum_sha256": i.checksum_sha256,
             }
             for i in product.images
         ],
@@ -485,7 +496,22 @@ def resolve_decision(
                     version.is_publishable = True
             if product and decision.kind == DecisionKind.accept_enrichment and decision.proposed_value is not None:
                 version = db.get(ProductVersion, product.current_version_id)
-                if version and decision.field_name:
+                if version and decision.field_name == "primary_image":
+                    from app.services.manufacturer_recovery import accept_retrieved_image
+
+                    accept_retrieved_image(db, product, str(decision.proposed_value))
+                elif version and decision.field_name:
+                    proposed = dict(version.proposed)
+                    proposed[decision.field_name] = decision.proposed_value
+                    version.proposed = proposed
+                    product.approved_version_id = None
+            if product and decision.kind == DecisionKind.no_primary_image and decision.proposed_value:
+                from app.services.manufacturer_recovery import accept_retrieved_image
+
+                accept_retrieved_image(db, product, str(decision.proposed_value))
+            if product and decision.kind == DecisionKind.conflicting_variant and decision.proposed_value is not None:
+                version = db.get(ProductVersion, product.current_version_id)
+                if version and decision.field_name and decision.field_name != "primary_image":
                     proposed = dict(version.proposed)
                     proposed[decision.field_name] = decision.proposed_value
                     version.proposed = proposed
@@ -730,6 +756,45 @@ def add_shopper_cart_item(
     return cart_out(db, cart)
 
 
+@public_router.patch("/store/cart/items/{store_product_id}", response_model=CartOut)
+def update_shopper_cart_item(
+    store_product_id: uuid.UUID,
+    body: UpdateCartItemRequest,
+    response: Response,
+    sr_shopper_cart: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+) -> CartOut:
+    cart_id = parse_cart_id(sr_shopper_cart)
+    if not cart_id:
+        raise HTTPException(404, "Cart not found")
+    ws = get_workspace(db)
+    cart = get_or_create_cart(db, ws, purpose=SHOPPER_PURPOSE, cart_id=cart_id)
+    set_item_quantity(db, cart, store_product_id, body.quantity)
+    db.commit()
+    db.refresh(cart)
+    _set_shopper_cookie(response, cart.id)
+    return cart_out(db, cart)
+
+
+@public_router.delete("/store/cart/items/{store_product_id}", response_model=CartOut)
+def delete_shopper_cart_item(
+    store_product_id: uuid.UUID,
+    response: Response,
+    sr_shopper_cart: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+) -> CartOut:
+    cart_id = parse_cart_id(sr_shopper_cart)
+    if not cart_id:
+        raise HTTPException(404, "Cart not found")
+    ws = get_workspace(db)
+    cart = get_or_create_cart(db, ws, purpose=SHOPPER_PURPOSE, cart_id=cart_id)
+    remove_item(db, cart, store_product_id)
+    db.commit()
+    db.refresh(cart)
+    _set_shopper_cookie(response, cart.id)
+    return cart_out(db, cart)
+
+
 @public_router.get("/store/cart", response_model=CartOut)
 def get_shopper_cart(
     response: Response,
@@ -825,13 +890,25 @@ def load_sample_batch(db: Session = Depends(get_db)) -> Batch:
     )
 
 
+@router.post("/demo/load-seiko", response_model=BatchOut)
+def load_seiko_batch(db: Session = Depends(get_db)) -> Batch:
+    """Load the Seiko demonstration catalog (hero starts without an image)."""
+    return import_fixture_batch(
+        db,
+        csv_name="seiko_demo_catalog.csv",
+        batch_name=f"Seiko demonstration · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC",
+        supplier_name="Pacific Watch Distributors",
+        batch_kind=BatchKind.demo,
+    )
+
+
 @router.post("/demo/load-demo", response_model=BatchOut)
 def load_demo_batch(db: Session = Depends(get_db)) -> Batch:
-    """Load the demonstration catalog with real barcodes and labeled scenarios."""
+    """Load the household demonstration catalog with real barcodes and labeled scenarios."""
     return import_fixture_batch(
         db,
         csv_name="demo_catalog.csv",
-        batch_name=f"Demo catalog · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC",
+        batch_name=f"Household demo · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC",
         supplier_name="Household Essentials Co.",
         batch_kind=BatchKind.demo,
     )

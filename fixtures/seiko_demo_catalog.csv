@@ -1,0 +1,6 @@
+sku,title,description,brand,color,category,product_type,price,currency,stock,image_filename,model,mpn,case_diameter,case_thickness,lug_to_lug,lug_width,caliber,movement_type,power_reserve,case_material,crystal,bracelet_material,water_resistance,weight,collection,demo_scenario
+SK-SRPD55-01,,Seiko 5 Sports automatic watch.,Seiko,,Watches,Watch,229.00,USD,12,,SRPD55,,,,,,,,,,,,,,,,missing_image_hero
+SK-SRPD51-01,Seiko 5 Sports SRPD51,Seiko 5 Sports SKX-series automatic watch.,Seiko,,Watches,Watch,229.00,USD,8,SRPD51K1.png,SRPD51,,40mm,,,,,,,,,,,,,,conflicting_case_diameter
+SK-SRPD63-01,Seiko 5 Sports SRPD63,Seiko 5 Sports SKX-series automatic watch.,SEIKO,,Watches,Watch,229.00,USD,10,SRPD63K1.png,SRPD63,,42.5mm,13.4mm,46.0mm,22,4R36,Automatic with manual winding,Approx. 41 hours,Stainless steel,Hardlex,,10bar,170.0g,5 Sports SKX series,mostly_complete
+SK-SRPD53-01,Seiko 5 Sports SRPD53,Seiko 5 Sports SKX-series automatic watch.,Seiko,,Watches,Watch,229.00,USD,6,SRPD51K1.png,SRPD53,,,,,,,,,,,,,,,,wrong_variant_image
+SK-SEIKO5-AMB,Seiko 5 Sports,Automatic sports watch. Model not specified by supplier.,Seiko,,Watches,Watch,199.00,USD,4,,,,,,,,,,,,,,,ambiguous_reference

@@ -1,21 +1,13 @@
 # Five-minute demo script
 
-**Setup:** `AGENT_MODE=replay`, `LOOKUP_PROVIDER=replay`, API + worker + web running. UI shows **Fixture replay mode**.
+**Setup:** `AGENT_MODE=replay`, `LOOKUP_PROVIDER=replay`, API + worker + web running.
 
-1. **Problem (30s)** — Small stores spend hours cleaning supplier spreadsheets. ShelfReady imports, enriches from barcode evidence, escalates conflicts, publishes, and verifies — not a chatbot that only recommends.
+1. **Problem** — Supplier watches arrive without photos or with the wrong variant image. ShelfReady retrieves the manufacturer record, stores evidence, and publishes only accepted revisions.
+2. **Seiko demonstration** — Operator **Try Seiko demonstration**. SK-SRPD55-01 has no supplier photo. Featured `/store` is this collection (not Seiko-sponsored). Household demo remains available separately.
+3. **Prepare** — Worker runs `retrieve_manufacturer_record`. Replay uses official-page HTML fixtures and the downloaded SRPD55 photograph; the UI must label replay.
+4. **Workbench** — Side-by-side missing image vs retrieved photo. Accept the image. SRPD51 keeps supplier 40mm on the original row and the 42.5mm manufacturer correction on the proposed listing.
+5. **Publish** — Featured ready SKUs only. Ambiguous SK-SEIKO5-AMB and wrong-variant SK-SRPD53-01 stay unpublished.
+6. **Store + cart** — Open SRPD55, add to cart, change quantity, remove. Demo cart, no payment.
+7. **Evidence** — Preparation page: original → accepted improvements → published result.
 
-2. **Try demo catalog (30s)** — Operator workspace → **Try demo catalog**. Show household rows with real UPCs and documented demo scenarios (`fixtures/demo_catalog.md`). The public shop at `/store` shows only the curated, published listings.
-
-3. **Prepare products (45s)** — **Prepare products**. Open **Run activity** — tool actions include `lookup_product_identifier`. Batch summary shows ready / needs information / conflicts.
-
-4. **Workbench (60s)** — Open **HC-COKE-01**: sparse supplier title/brand enriched from replay barcode evidence (labeled **replay fixture**), with a soda-can demonstration illustration. Open **HC-COKE-02**: “Supplier says Black. The barcode record says Red.” Resolve the variant conflict in the drawer.
-
-5. **Missing price (30s)** — **HC-NOPRICE-01**: enter price in drawer (no “Approve null” path).
-
-6. **Publish + verify (60s)** — Select ready products → **Review and publish**. Open demo store product link from drawer. Show verification count on batch summary.
-
-7. **Stress test (optional, dev view)** — **Show dev batches** → load stress-test catalog for alias/duplicate/injection cases.
-
-8. **Close (30s)** — Live mode uses Strands structured assessments plus tools; replay never pretends to be live. A live model with replay lookup is labeled **Live agent · replay lookup**. Live UPC lookups require `UPCITEMDB_API_KEY` (`docs/provider-setup.md`).
-
-**Use only counts visible on screen — do not invent accuracy % or time saved.**
+**Use only counts visible on screen.**

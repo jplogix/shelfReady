@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BatchHeader } from "@/components/BatchHeader";
 import { BatchSummary } from "@/components/BatchSummary";
 import { ProductDrawer } from "@/components/ProductDrawer";
@@ -114,7 +114,7 @@ export default function BatchPage() {
     });
   }
 
-  const primaryAction = useMemo(() => {
+  const primaryAction = (() => {
     if (!batch) return undefined;
     const ready = batch.counts?.ready_to_publish ?? 0;
     const published = batch.counts?.published ?? 0;
@@ -132,7 +132,7 @@ export default function BatchPage() {
       return { label: "View published products", onClick: () => setFilter("published"), disabled: false };
     }
     return { label: "Run processing", onClick: runProcess, disabled: !!busy };
-  }, [batch, busy, selected.size]);
+  })();
 
   if (!batch && error) {
     return <ErrorState message={error} onRetry={refresh} />;

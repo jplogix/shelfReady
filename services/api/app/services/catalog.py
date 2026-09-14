@@ -34,6 +34,7 @@ from app.policy.normalize import (
 from app.policy.readiness import refresh_product_readiness
 from app.policy.seo import build_seo_draft, sanitize_supplier_text
 from app.policy.validate import compute_diffs, validate_product_fields
+from app.policy.watch_specs import copy_watch_fields, model_token_in_asset, normalize_water_resistance
 
 
 def active_rules_map(db: Session, workspace_id: uuid.UUID, rule_type: str) -> list[tuple[str, str]]:
@@ -91,7 +92,13 @@ def process_product(
         "model": original.get("model"),
         "size": original.get("size"),
         "pack_quantity": original.get("pack_quantity"),
+        "demo_scenario": original.get("demo_scenario"),
     }
+    proposed.update(copy_watch_fields(original))
+    if proposed.get("model") and not proposed.get("manufacturer_reference"):
+        proposed["manufacturer_reference"] = str(proposed["model"]).strip().upper().replace(" ", "")
+    if proposed.get("water_resistance"):
+        proposed["water_resistance"] = normalize_water_resistance(str(proposed["water_resistance"]))
 
     # Safe whitespace cleanup already applied — automatic
     provenance = {
@@ -112,12 +119,15 @@ def process_product(
             stem = img.original_path.split("/")[-1]
             meta = lookup_image_meta(fname) or lookup_image_meta(stem)
             img.is_primary = False
+            product_model = original.get("model")
             if meta:
                 img.image_class = meta.image_class
                 img.classification_source = "fixture_replay"
                 img.source_kind = meta.source_kind
                 img.usage_permission = meta.usage_permission
-                img.suitability = suitability_for(meta, product_type, category)
+                img.suitability = suitability_for(
+                    meta, product_type, category, model=str(product_model) if product_model else None
+                )
             else:
                 img.image_class = ImageClass.unknown
                 img.classification_source = "unknown"
@@ -128,13 +138,17 @@ def process_product(
         matching_primary = [
             i
             for i in images
-            if i.image_class == ImageClass.product_only and i.suitability == "category_match"
+            if i.image_class == ImageClass.product_only
+            and i.suitability in {"category_match", "source_model_match"}
         ]
         product_only = [i for i in images if i.image_class == ImageClass.product_only]
         chosen = matching_primary or product_only
         if chosen:
-            chosen[0].is_primary = True
-            has_primary = True
+            if chosen[0].suitability == "model_mismatch":
+                has_primary = False
+            else:
+                chosen[0].is_primary = True
+                has_primary = True
         else:
             has_primary = False
 
@@ -340,6 +354,28 @@ def process_product(
                 reason="No suitable product-only primary image.",
                 consequence="Publication blocked until a primary image is approved or uploaded.",
                 risk_tier="review",
+            )
+
+    if images:
+        fname_model = original.get("model")
+        fname_image = original.get("image_filename") or ""
+        if fname_model and fname_image and not model_token_in_asset(str(fname_model), str(fname_image)):
+            add_decision(
+                DecisionKind.conflicting_variant,
+                field="primary_image",
+                original_value=fname_image,
+                proposed_value=None,
+                reason=(
+                    f"Supplier image '{fname_image}' does not associate with model {fname_model}. "
+                    "Constructed demo error: wrong-variant photograph."
+                ),
+                consequence="Publication blocked until a matching photograph is approved.",
+                risk_tier="approval",
+                evidence={
+                    "constructed_demo_error": True,
+                    "detection": "source_model_association",
+                    "vision_used": False,
+                },
             )
 
     # Publication is handled via batch review-and-publish, not per-product inbox cards.

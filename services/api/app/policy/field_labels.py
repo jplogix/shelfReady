@@ -21,6 +21,23 @@ FIELD_LABELS: dict[str, str] = {
     "size": "Size",
     "pack_quantity": "Pack quantity",
     "image_filename": "Supplier image file",
+    "manufacturer_reference": "Manufacturer reference",
+    "collection": "Collection",
+    "movement_type": "Movement type",
+    "caliber": "Caliber",
+    "power_reserve": "Power reserve",
+    "case_material": "Case material",
+    "case_diameter": "Case diameter",
+    "case_thickness": "Case thickness",
+    "lug_to_lug": "Lug-to-lug length",
+    "lug_width": "Lug width",
+    "crystal": "Crystal",
+    "bracelet_material": "Bracelet / strap material",
+    "dial_color": "Dial color",
+    "water_resistance": "Water-resistance rating",
+    "weight": "Weight",
+    "primary_image": "Product photo",
+    "demo_scenario": "Demo scenario",
 }
 
 

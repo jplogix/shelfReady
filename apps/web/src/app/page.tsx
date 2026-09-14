@@ -35,8 +35,9 @@ export default function HomePage() {
           From messy supplier data to storefront-ready products.
         </h1>
         <p className="max-w-xl text-lg text-ink-muted">
-          These listings were prepared from a supplier spreadsheet: original rows, accepted
-          corrections, and supporting evidence are visible on each product.
+          These listings were prepared from a supplier spreadsheet of Seiko 5 Sports references.
+          Independent demonstration — not affiliated with Seiko. Original rows, accepted corrections,
+          and supporting evidence are visible on each product.
         </p>
         {mode && (
           <p className="max-w-xl text-sm text-ink-muted">

@@ -44,6 +44,19 @@ PUBLIC_ORIGINAL_FIELDS = (
     "mpn",
     "model",
     "size",
+    "manufacturer_reference",
+    "collection",
+    "caliber",
+    "movement_type",
+    "power_reserve",
+    "case_material",
+    "case_diameter",
+    "case_thickness",
+    "lug_to_lug",
+    "lug_width",
+    "crystal",
+    "water_resistance",
+    "weight",
 )
 
 SKIP_CORRECTION_FIELDS = {
@@ -56,6 +69,9 @@ SKIP_CORRECTION_FIELDS = {
     "identifier_raw",
     "identifier_normalized",
     "identifier_valid",
+    "demo_scenario",
+    "primary_image_id",
+    "water_resistance_note",
 }
 
 
@@ -114,6 +130,11 @@ def _primary_image(store_product: StoreProduct) -> StoreImageOut | None:
 
 def to_public_store_product(store_product: StoreProduct) -> StoreProductOut:
     primary = _primary_image(store_product)
+    specs = []
+    if isinstance(store_product.seo, dict):
+        raw_specs = store_product.seo.get("specifications") or []
+        if isinstance(raw_specs, list):
+            specs = [row for row in raw_specs if isinstance(row, dict) and row.get("value")]
     return StoreProductOut(
         id=store_product.id,
         slug=store_product.slug,
@@ -129,6 +150,8 @@ def to_public_store_product(store_product: StoreProduct) -> StoreProductOut:
         sku=store_product.variant_sku,
         image_caption=primary.caption if primary else None,
         image_suitability=primary.suitability if primary else None,
+        specifications=[{"field": r.get("field", ""), "value": r.get("value", "")} for r in specs],
+        collection=(store_product.seo or {}).get("collection") if isinstance(store_product.seo, dict) else None,
     )
 
 
@@ -174,11 +197,13 @@ def listing_provenance(db: Session, store_product: StoreProduct) -> ListingProve
     settings = get_settings()
     product = db.get(Product, store_product.product_id)
     version: ProductVersion | None = None
-    if product and product.current_version_id:
+    if product and product.approved_version_id:
+        version = db.get(ProductVersion, product.approved_version_id)
+    if product and version is None and product.current_version_id:
         version = db.get(ProductVersion, product.current_version_id)
 
     original = dict(version.original) if version and version.original else {}
-    original_row = {key: original.get(key) for key in PUBLIC_ORIGINAL_FIELDS if key in original}
+    original_row = {key: original.get(key) for key in PUBLIC_ORIGINAL_FIELDS if key in original and key != "demo_scenario"}
 
     corrections: list[ListingCorrectionOut] = []
     for diff in version.diffs if version and version.diffs else []:
@@ -207,12 +232,15 @@ def listing_provenance(db: Session, store_product: StoreProduct) -> ListingProve
             supports_listing = row.field_name in corrected
             if not accepted and not supports_listing:
                 continue
+            proposed = row.proposed_value
+            if row.field_name == "primary_image":
+                proposed = "Retrieved manufacturer photograph"
             evidence_rows.append(
                 ListingEvidenceOut(
                     field_name=row.field_name,
                     label=field_label(row.field_name),
                     original_supplier_value=row.original_supplier_value,
-                    proposed_value=row.proposed_value,
+                    proposed_value=proposed,
                     source_provider=row.source_provider,
                     source_url=row.source_url,
                     match_outcome=str(_enum_value(row.match_outcome)),
@@ -222,14 +250,43 @@ def listing_provenance(db: Session, store_product: StoreProduct) -> ListingProve
             )
 
     assessment_raw = (version.provenance or {}).get("assessment") if version else None
-    agent = settings.agent_mode
-    lookup = settings.lookup_provider
+    stored_mode = (version.provenance or {}).get("manufacturer_source") if version else {}
+    if not isinstance(stored_mode, dict):
+        stored_mode = {}
+    agent = stored_mode.get("agent_mode") or settings.agent_mode
+    lookup = stored_mode.get("lookup_mode") or settings.lookup_provider
+    retrieval = stored_mode.get("retrieval_mode")
     if agent == "replay":
         label = "Fixture replay · replay lookup" if lookup == "replay" else "Fixture replay · live lookup"
     elif lookup == "replay":
         label = "Live agent · replay lookup"
     else:
         label = "Live agent · live lookup"
+    if retrieval:
+        label = f"{label} · manufacturer source {retrieval}"
+
+    photo_added = any(row.field_name == "primary_image" for row in evidence_rows)
+    spec_fields = {
+        "caliber",
+        "movement_type",
+        "case_diameter",
+        "water_resistance",
+        "manufacturer_reference",
+        "collection",
+        "power_reserve",
+        "crystal",
+    }
+    specs_completed = sum(1 for c in corrections if c.field in spec_fields)
+    if photo_added and specs_completed:
+        outcome = "Added a product photo and completed supported specifications."
+    elif photo_added:
+        outcome = "Added a product photo."
+    elif specs_completed:
+        outcome = f"Completed {specs_completed} supported specification{'s' if specs_completed != 1 else ''}."
+    elif corrections:
+        outcome = f"Applied {len(corrections)} accepted improvement{'s' if len(corrections) != 1 else ''}."
+    else:
+        outcome = "Published listing matches the accepted supplier facts."
 
     original_fields = [
         ListingFieldOut(field=key, label=field_label(key), value=value)
@@ -250,4 +307,5 @@ def listing_provenance(db: Session, store_product: StoreProduct) -> ListingProve
         assessment=_public_assessment(assessment_raw if isinstance(assessment_raw, dict) else None),
         image_caption=primary.caption if primary else None,
         image_suitability=primary.suitability if primary else None,
+        outcome_summary=outcome,
     )

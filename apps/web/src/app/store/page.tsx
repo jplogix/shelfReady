@@ -27,7 +27,11 @@ export default function StorePage() {
     <div className="space-y-6">
       <div>
         <p className="text-xs uppercase tracking-wide text-ink-muted">Demo storefront · noindex · no payments</p>
-        <h1 className="text-3xl text-charcoal">Published products</h1>
+        <h1 className="text-3xl text-charcoal">Seiko demonstration collection</h1>
+        <p className="mt-2 max-w-2xl text-ink-muted">
+          Independent ShelfReady demonstration using Seiko 5 Sports references. Not affiliated with, sponsored
+          by, or endorsed by Seiko Watch Corporation. Prices and stock are merchant fixture values.
+        </p>
       </div>
       {error ? (
         <ErrorState message={error} onRetry={refresh} />
@@ -35,8 +39,8 @@ export default function StorePage() {
         <p className="text-ink-muted">Loading published products…</p>
       ) : products.length === 0 ? (
         <EmptyState>
-          No published products yet. Process a batch in the operator workspace, resolve decisions, then
-          publish.
+          No featured demonstration products yet. Process the Seiko catalog in the operator workspace, resolve
+          decisions, then publish.
         </EmptyState>
       ) : (
         <ProductGrid products={products} />

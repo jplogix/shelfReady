@@ -35,6 +35,10 @@ def client():
 
 
 def test_shopper_cart_is_public_enforces_stock_and_server_price(client):
+    empty = client.get("/api/store/cart")
+    assert empty.status_code == 200, empty.text
+    assert empty.json()["purpose"] == "shopper"
+
     db = SessionLocal()
     try:
         sp = db.scalar(select(StoreProduct).where(StoreProduct.available.is_(True)).limit(1))
@@ -64,6 +68,23 @@ def test_shopper_cart_is_public_enforces_stock_and_server_price(client):
         json={"store_product_id": product_id, "quantity": stock + 50, "purpose": "shopper"},
     )
     assert too_many.status_code == 400
+
+    updated = client.patch(
+        f"/api/store/cart/items/{product_id}",
+        json={"quantity": 1},
+        cookies=add.cookies,
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["items"][0]["quantity"] == 1
+    removed = client.delete(f"/api/store/cart/items/{product_id}", cookies=add.cookies)
+    assert removed.status_code == 200
+    assert removed.json()["items"] == []
+    restored = client.post(
+        "/api/store/cart/items",
+        json={"store_product_id": product_id, "quantity": 1, "purpose": "shopper"},
+        cookies=add.cookies,
+    )
+    assert restored.status_code == 200
 
     verify_blocked = client.post(
         "/api/store/cart/items",

@@ -9,7 +9,7 @@ ShelfReady prepares supplier catalogs for publication through evidence-backed co
 | Operator UI + demo storefront | `apps/web` (Next.js 15 App Router) |
 | API, Strands agent, worker | `services/api` (FastAPI, SQLAlchemy, Alembic) |
 | Shared contract notes | `packages/contracts` (OpenAPI at `/docs` is the source of truth) |
-| Fixtures | `fixtures/` — curated demo `demo_catalog.csv`; stress-test `supplier_catalog.csv`; replay UPC JSON in `fixtures/replay/upc/`; images in `fixtures/demo_images/` |
+| Fixtures | `fixtures/` — household `demo_catalog.csv`; Seiko demonstration `seiko_demo_catalog.csv` + `fixtures/seiko_images/`; stress-test `supplier_catalog.csv`; replay UPC JSON in `fixtures/replay/upc/`; manufacturer HTML replay in `fixtures/replay/seiko/` |
 | Migrations | `services/api/alembic/versions/` |
 | API tests | `services/api/tests/` |
 | Browser E2E | `apps/web/e2e/vertical-slice.spec.ts` |
@@ -22,7 +22,8 @@ Do not describe planned components as already implemented. AgentCore is a docume
 - **Worker:** `services/api/app/worker.py` (`claim_next_job`, `execute_job`)
 - **Job dispatch:** `services/api/app/agent/runner.py` — `execute_job` → `run_live` or `run_replay`
 - **Live agent:** `run_live` builds a Strands `Agent` with Bedrock (`_build_strands_agent`), invokes tools, and consumes `result.structured_output` (`ProductAssessment`, `ProductPatchProposal`, `ListingDraft` in `app/agent/schemas.py`)
-- **Replay:** `run_replay` → `run_deterministic_processing(..., enrich=True)` in `app/agent/tools.py` (same validation/publish/verify services; no model calls)
+- **Replay:** `run_replay` → `run_deterministic_processing(..., enrich=True)` in `app/agent/tools.py` (same validation/publish/verify services; no model calls). Seiko rows also call `retrieve_manufacturer_record`.
+- **Manufacturer recovery:** `app/services/manufacturer_recovery.py` (Strands tool `retrieve_manufacturer_record`). Registry: `fixtures/manufacturer/seiko_registry.json`. Replay HTML/images vs network fetch are labeled separately from `AGENT_MODE`.
 - **Enrichment:** `app/enrichment/service.py` (`enrich_product`); providers `ReplayLookupProvider`, `UPCitemdbProvider`
 - **Publication:** `publish_product` in `app/agent/tools.py` → `DemoStoreAdapter.publish_product` (`app/store/demo.py`)
 - **Verification:** `verify_published_product` → `DemoStoreAdapter.verify_product` (adapter retrieval, JSON-LD, isolated verification cart — not a crawl of Next.js HTML)
@@ -70,7 +71,7 @@ Record **agent mode** (`AGENT_MODE=live|replay`) and **lookup mode** (`LOOKUP_PR
 - Never present placeholders or generated branded packaging as authentic product photography.
 - Distinguish successful image loading from image suitability (category match vs mismatch). Unsuitable images may still load.
 
-Public bootstrap publishes only the curated demonstration SKUs in `PUBLIC_DEMO_SKUS` (`app/services/demo_catalog.py`). The public shop grid uses the same allowlist. Operator “Try demo catalog” still imports the full scenario sheet, including conflicts and missing prices.
+Public bootstrap publishes the featured Seiko demonstration SKUs in `PUBLIC_FEATURED_SKUS` (`app/services/demo_catalog.py`). The public shop grid uses that collection. Household `demo_catalog.csv` remains available from the operator workspace and is not deleted. Operator “Try Seiko demonstration” imports the five-row Seiko sheet; the hero SKU starts with no image.
 
 ## Access and cart boundaries
 
@@ -104,6 +105,13 @@ cd services/api && .venv/bin/alembic upgrade head
 
 # Worker
 .venv/bin/python -m app.worker
+
+# Isolated Seiko demo (dry-run by default)
+.venv/bin/python scripts/reset_seiko_demo.py
+.venv/bin/python scripts/reset_seiko_demo.py --apply
+
+# Image handoff zip
+.venv/bin/python scripts/build_seiko_handoff.py
 
 # Frontend (port 3000); browser calls same-origin /api
 cd apps/web && npm run dev

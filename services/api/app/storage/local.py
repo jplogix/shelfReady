@@ -65,7 +65,8 @@ class LocalStorage:
         if clean.mode not in ("RGB", "RGBA"):
             clean = clean.convert("RGB")
 
-        digest = hashlib.sha256(data).hexdigest()[:16]
+        sha256 = hashlib.sha256(data).hexdigest()
+        digest = sha256[:16]
         stem = Path(filename).stem[:40] or "image"
         uid = uuid.uuid4().hex[:8]
         rel_dir = Path(subdirectory)
@@ -74,14 +75,16 @@ class LocalStorage:
         ext = "jpg" if mime == "image/jpeg" else ("png" if mime == "image/png" else "webp")
         original_name = f"{stem}-{digest}-{uid}.{ext}"
         original_path = abs_dir / original_name
-        save_fmt = ALLOWED_MIME[mime]
-        clean.save(original_path, format=save_fmt, optimize=True)
+        original_path.write_bytes(data)
 
-        # Derivative: max 800px
+        # Derivative: max 800px, EXIF stripped
         deriv = clean.copy()
         deriv.thumbnail((800, 800))
+        if deriv.mode not in ("RGB", "RGBA"):
+            deriv = deriv.convert("RGB")
         deriv_name = f"{stem}-{digest}-{uid}-800.{ext}"
         deriv_path = abs_dir / deriv_name
+        save_fmt = ALLOWED_MIME[mime]
         deriv.save(deriv_path, format=save_fmt, optimize=True)
 
         return {
@@ -91,6 +94,7 @@ class LocalStorage:
             "width": w,
             "height": h,
             "size_bytes": original_path.stat().st_size,
+            "sha256": sha256,
         }
 
     def absolute(self, relative: str) -> Path:

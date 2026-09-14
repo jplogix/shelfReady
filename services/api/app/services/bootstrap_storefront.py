@@ -33,10 +33,13 @@ from app.services.demo_catalog import PUBLIC_DEMO_SKUS, canonical_sku
 
 logger = logging.getLogger(__name__)
 
-PUBLIC_DEMO_BATCH = "Public demonstration catalog"
+PUBLIC_DEMO_BATCH = "Seiko demonstration catalog"
+HOUSEHOLD_DEMO_BATCH = "Household demonstration catalog"
 SAFE_BOOTSTRAP_KINDS = {
     DecisionKind.accept_enrichment,
     DecisionKind.unsupported_claim,
+    DecisionKind.no_primary_image,
+    DecisionKind.unknown_brand_alias,
 }
 ADVISORY_LOCK = 872401
 
@@ -50,9 +53,14 @@ def ensure_public_storefront() -> None:
     db = SessionLocal()
     try:
         db.execute(text("SELECT pg_advisory_lock(:k)"), {"k": ADVISORY_LOCK})
-        existing = db.scalar(select(func.count()).select_from(StoreProduct))
-        if existing:
-            logger.info("Storefront already has %s published products", existing)
+        featured = 0
+        for row in db.scalars(select(StoreProduct)).all():
+            product = db.get(Product, row.product_id)
+            sku = (product.supplier_sku or product.sku) if product else row.variant_sku
+            if canonical_sku(sku) in PUBLIC_DEMO_SKUS:
+                featured += 1
+        if featured:
+            logger.info("Featured Seiko collection already has %s published products", featured)
             return
         _bootstrap(db)
     except Exception:
@@ -85,9 +93,9 @@ def _bootstrap(db: Session) -> None:
     if not batch:
         batch = import_fixture_batch(
             db,
-            csv_name="demo_catalog.csv",
+            csv_name="seiko_demo_catalog.csv",
             batch_name=PUBLIC_DEMO_BATCH,
-            supplier_name="Household Essentials Co.",
+            supplier_name="Pacific Watch Distributors",
             batch_kind=BatchKind.demo,
         )
 
@@ -146,6 +154,14 @@ def _accept_safe_decisions(db: Session, batch_id: uuid.UUID) -> None:
         if decision.kind in SAFE_BOOTSTRAP_KINDS:
             if decision.kind == DecisionKind.accept_enrichment and decision.proposed_value is None:
                 continue
+            if decision.kind == DecisionKind.no_primary_image and decision.proposed_value is None:
+                continue
+            _approve(db, decision)
+        if (
+            decision.kind == DecisionKind.conflicting_variant
+            and decision.field_name != "primary_image"
+            and decision.proposed_value is not None
+        ):
             _approve(db, decision)
 
     for decision in pending_for_batch():

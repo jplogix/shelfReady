@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ErrorState } from "@/components/RequestState";
 import { ListingProvenance, api } from "@/lib/api";
+import { fieldLabel } from "@/lib/field-labels";
 
 function Value({ value }: { value: unknown }) {
   if (value == null || value === "") return <span className="text-ink-muted">Empty</span>;
@@ -42,7 +43,7 @@ export default function PreparedListingPage() {
     ? data.original_fields
     : Object.entries(data.original_row).map(([field, value]) => ({
         field,
-        label: field.replace(/_/g, " "),
+        label: fieldLabel(field),
         value,
       }));
 
@@ -66,10 +67,13 @@ export default function PreparedListingPage() {
             ? ". Replay uses the same validation and publish path without a live model call. Structured Strands assessments appear when live agent mode is enabled."
             : ". Live Strands structured output was persisted for this listing."}
         </p>
+        {data.outcome_summary && <p className="mt-3 text-lg text-charcoal">{data.outcome_summary}</p>}
         {data.image_caption && (
           <p className="mt-2 text-sm text-ink-muted">
             Listing image: {data.image_caption}
-            {data.image_suitability === "category_match" ? " The illustration matches this product category." : ""}
+            {data.image_suitability === "source_model_match"
+              ? " Source/model association was checked against the manufacturer page."
+              : ""}
             {data.image_suitability === "category_mismatch"
               ? " The file loaded, but it is not a category-matching product image."
               : ""}

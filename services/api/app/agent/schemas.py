@@ -26,9 +26,24 @@ class AttributeFinding(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list, description="Existing FieldEvidence IDs only")
 
 
+class IdentityMatchStatus(str, Enum):
+    exact_model_match = "exact_model_match"
+    no_exact_match = "no_exact_match"
+    multiple_plausible_matches = "multiple_plausible_matches"
+    ambiguous_reference = "ambiguous_reference"
+    variant_image_mismatch = "variant_image_mismatch"
+    not_evaluated = "not_evaluated"
+
+
 class ProductAssessment(BaseModel):
     """Merchant-facing assessment for a single product after inspecting evidence."""
 
+    product_id: str | None = Field(default=None, description="Product UUID from trusted application context")
+    input_revision_id: str | None = Field(
+        default=None, description="Current product revision UUID this assessment applies to"
+    )
+    identity_match: IdentityMatchStatus = Field(default=IdentityMatchStatus.not_evaluated)
+    manufacturer_reference: str | None = Field(default=None)
     candidate_identifier: str | None = Field(
         default=None,
         description="Normalized barcode/GTIN if one exists; null when unmatched or absent",
@@ -44,7 +59,18 @@ class ProductAssessment(BaseModel):
         default_factory=list,
         description="FieldEvidence IDs that were actually retrieved for this product",
     )
-    explanation: str = Field(description="Concise merchant-facing explanation")
+    proposed_image_asset_id: str | None = Field(default=None)
+    proposed_image_evidence_ids: list[str] = Field(default_factory=list)
+    recommended_next_action: Literal[
+        "none",
+        "lookup",
+        "retrieve_manufacturer_record",
+        "request_decision",
+        "propose_patch",
+        "draft_listing",
+        "use_retrieved_image",
+    ] = Field(default="none")
+    explanation: str = Field(description="Concise merchant-facing explanation grounded in retrieved evidence")
     needs_merchant_decision: bool = Field(
         default=False,
         description="True when a human must choose among contradictions or supply a required value",
@@ -55,6 +81,8 @@ class ProductAssessment(BaseModel):
         "request_decision",
         "propose_patch",
         "draft_listing",
+        "retrieve_manufacturer_record",
+        "use_retrieved_image",
     ] = Field(
         default="none",
         description="Next application action justified by the evidence",
@@ -71,6 +99,20 @@ ALLOWLISTED_PATCH_FIELDS = Literal[
     "size",
     "model",
     "product_type",
+    "collection",
+    "caliber",
+    "movement_type",
+    "power_reserve",
+    "case_material",
+    "case_diameter",
+    "case_thickness",
+    "lug_to_lug",
+    "lug_width",
+    "crystal",
+    "bracelet_material",
+    "water_resistance",
+    "weight",
+    "manufacturer_reference",
 ]
 
 

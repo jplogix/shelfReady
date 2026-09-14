@@ -207,6 +207,8 @@ class StoreProductOut(BaseModel):
     sku: str
     image_caption: Optional[str] = None
     image_suitability: Optional[str] = None
+    specifications: list[dict[str, str]] = Field(default_factory=list)
+    collection: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -257,6 +259,7 @@ class ListingProvenanceOut(BaseModel):
     assessment: Optional[ListingAssessmentOut] = None
     image_caption: Optional[str] = None
     image_suitability: Optional[str] = None
+    outcome_summary: Optional[str] = None
 
 
 class CartItemOut(BaseModel):
@@ -270,15 +273,23 @@ class CartItemOut(BaseModel):
     image: Optional[str] = None
     available: bool = True
     stock: int = 0
+    line_total: Decimal = Decimal("0")
 
 
 class CartOut(BaseModel):
     id: uuid.UUID
     purpose: str
     items: list[CartItemOut]
+    subtotal: Decimal = Decimal("0")
+    currency: str = "USD"
+    item_count: int = 0
 
 
 class AddToCartRequest(BaseModel):
     store_product_id: uuid.UUID
     quantity: int = 1
     purpose: str = "shopper"
+
+
+class UpdateCartItemRequest(BaseModel):
+    quantity: int

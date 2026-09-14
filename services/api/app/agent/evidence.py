@@ -39,6 +39,20 @@ ALLOWLISTED_FIELDS = frozenset(
         "size",
         "model",
         "product_type",
+        "collection",
+        "caliber",
+        "movement_type",
+        "power_reserve",
+        "case_material",
+        "case_diameter",
+        "case_thickness",
+        "lug_to_lug",
+        "lug_width",
+        "crystal",
+        "bracelet_material",
+        "water_resistance",
+        "weight",
+        "manufacturer_reference",
     }
 )
 
@@ -106,11 +120,26 @@ def validate_assessment(
     validate_evidence_ids(
         db,
         product,
-        assessment.evidence_references,
+        list(assessment.evidence_references) + list(assessment.proposed_image_evidence_ids),
         expected_version_id=version.id,
     )
     for finding in [*assessment.attribute_agreements, *assessment.attribute_conflicts]:
         validate_evidence_ids(db, product, finding.evidence_ids, expected_version_id=version.id)
+    if assessment.product_id and assessment.product_id != str(product.id):
+        raise EvidenceValidationError("assessment_product_mismatch")
+    if assessment.input_revision_id and assessment.input_revision_id != str(version.id):
+        raise EvidenceValidationError("stale_product_revision")
+    if assessment.proposed_image_asset_id:
+        from app.db.models import ProductImage
+
+        try:
+            asset = db.get(ProductImage, uuid.UUID(str(assessment.proposed_image_asset_id)))
+        except ValueError as exc:
+            raise EvidenceValidationError("invalid_asset_id") from exc
+        if asset is None:
+            raise EvidenceValidationError(f"unknown_asset:{assessment.proposed_image_asset_id}")
+        if asset.product_id != product.id:
+            raise EvidenceValidationError(f"unrelated_asset:{assessment.proposed_image_asset_id}")
     return assessment
 
 
@@ -147,7 +176,29 @@ def validate_patch_proposal(
     supporting = [
         ev
         for ev in refs
-        if ev.field_name in {field, "title", "brand", "model", "size", "color"}
+        if ev.field_name in {
+            field,
+            "title",
+            "brand",
+            "model",
+            "size",
+            "color",
+            "manufacturer_reference",
+            "case_diameter",
+            "water_resistance",
+            "primary_image",
+            *{
+                "collection",
+                "caliber",
+                "movement_type",
+                "power_reserve",
+                "case_material",
+                "case_thickness",
+                "lug_to_lug",
+                "lug_width",
+                "crystal",
+            },
+        }
         and ev.match_outcome
         in {MatchOutcome.matching_evidence, MatchOutcome.possible_match}
     ]

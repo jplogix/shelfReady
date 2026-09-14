@@ -305,6 +305,10 @@ class ProductImage(Base):
     source_kind: Mapped[str] = mapped_column(String(50), default="unknown", nullable=False)
     usage_permission: Mapped[str] = mapped_column(String(50), default="unknown", nullable=False)
     suitability: Mapped[str] = mapped_column(String(50), default="unclassified", nullable=False)
+    checksum_sha256: Mapped[Optional[str]] = mapped_column(String(64))
+    product_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True))
+    source_url: Mapped[Optional[str]] = mapped_column(String(1000))
+    match_rationale: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     product: Mapped[Product] = relationship(back_populates="images")

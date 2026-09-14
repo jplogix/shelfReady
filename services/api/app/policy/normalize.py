@@ -24,6 +24,9 @@ SEED_BRAND_ALIASES: dict[str, str] = {
     "CleanCo": "CleanCo",
     "Old Spice": "Old Spice",
     "Demo Co": "Demo Co",
+    "SEIKO": "Seiko",
+    "Seiko": "Seiko",
+    "seiko": "Seiko",
 }
 
 SEED_COLOR_ALIASES: dict[str, list[str]] = {
@@ -51,6 +54,8 @@ SEED_CATEGORY_ALIASES: dict[str, str] = {
     "Beverages": "Beverages",
     "Personal Care": "Personal Care",
     "Household": "Household",
+    "Watches": "Watches",
+    "watches": "Watches",
 }
 
 SEED_TYPE_ALIASES: dict[str, str] = {
@@ -58,6 +63,8 @@ SEED_TYPE_ALIASES: dict[str, str] = {
     "Sun Glasses": "Sunglasses",
     "tote": "Tote Bag",
     "hoodie": "Hoodie",
+    "watch": "Watch",
+    "Watch": "Watch",
 }
 
 

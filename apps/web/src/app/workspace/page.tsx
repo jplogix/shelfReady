@@ -36,6 +36,18 @@ export default function WorkspacePage() {
     refresh();
   }, [refresh]);
 
+  async function loadSeiko() {
+    setBusy("seiko");
+    try {
+      const batch = await api.loadSeiko();
+      router.push(`/batches/${batch.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Seiko demo load failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function loadDemo() {
     setBusy("demo");
     try {
@@ -72,11 +84,19 @@ export default function WorkspacePage() {
         <div className="flex flex-wrap gap-3 pt-2">
           <button
             type="button"
-            onClick={loadDemo}
+            onClick={loadSeiko}
             disabled={!!busy}
             className="min-h-11 rounded bg-charcoal px-4 text-sm font-medium text-bg-elevated disabled:opacity-60"
           >
-            {busy === "demo" ? "Loading…" : "Try demo catalog"}
+            {busy === "seiko" ? "Loading…" : "Try Seiko demonstration"}
+          </button>
+          <button
+            type="button"
+            onClick={loadDemo}
+            disabled={!!busy}
+            className="min-h-11 rounded border border-line bg-bg-elevated px-4 text-sm font-medium disabled:opacity-60"
+          >
+            {busy === "demo" ? "Loading…" : "Try household demo catalog"}
           </button>
           <Link
             href="/import"

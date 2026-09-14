@@ -1,36 +1,60 @@
-# Completion report — demonstration quality pass
+# Completion report — Seiko demonstration + missing-image recovery
 
 ## Summary
 
-This pass makes the public storefront a credible demonstration: a sparse supplier row publishes as an accurate listing with a category-matching illustration, labeled corrections, inspectable evidence, and a server-enforced shopper cart. Stress-test fixtures stay off the shop grid.
+The featured public collection is a five-row Seiko 5 Sports supplier batch. SK-SRPD55-01 imports without an image; `retrieve_manufacturer_record` parses the official manufacturer page (replay HTML or network), stores the matching photograph with evidence, and publication uses the accepted asset. Household and stress-test fixtures are unchanged.
 
-## What changed
+## Images downloaded (2026-09-14)
 
-- Root `AGENTS.md` from the actual repository layout, commands, and symbols.
-- Category-matching demonstration illustrations (`fixtures/demo_images/demo-*.png`), with source/usage/suitability tracking. They are labeled **not authentic product photography**.
-- Public shop lists only curated demo SKUs (`app/services/demo_catalog.py`). CONFLICT / invalid-barcode / stress-test rows are not shown there.
-- Sparse `HC-COKE-01` keeps a supplier price and, after barcode evidence fills title/brand, stale missing-field blockers are cleared so it can publish.
-- Public provenance uses human-readable field labels. Shopper carts are cookie-scoped, isolated from verification carts, and use server prices/stock.
-- Operator workspace hides stress-test and test-run batches unless **Show dev batches** is on.
+| File | Model page | Visual review |
+|------|------------|---------------|
+| SRPD55K1.png | SRPD55 | Black dial/bezel, steel bracelet |
+| SRPD51K1.png | SRPD51 | Blue dial/bezel, steel bracelet |
+| SRPD63K1.png | SRPD63 | Green dial/bezel, rose-gold hands |
+| SRPD53K1.png | SRPD53 | Blue dial, blue/red bezel |
+| SRPD55K1_1.jpg / _2.jpg | SRPD55 gallery | Lifestyle; not used as primary |
 
-## Tests run
+Suitability: source association on the official page plus manual review of the downloaded files. Not independent authentication. Usage: manufacturer-hosted; commercial republication not established; `demo_storefront_only` for this isolated demo.
 
-```bash
-cd services/api && .venv/bin/pytest -q   # 44 passed
-cd apps/web && npx tsc --noEmit          # success
+The official SRPD55, SRPD51, SRPD63, and SRPD53 pages were re-opened on 2026-09-14 and still
+identified those exact references and their matching catalog-image codes (`SRPD55K1`, `SRPD51K1`,
+`SRPD63K1`, and `SRPD53K1`). Merchant fixture prices remain separate from Seiko's displayed price.
+
+## Setup / reset
+
+```
+cd services/api && .venv/bin/alembic upgrade head
+.venv/bin/python scripts/reset_seiko_demo.py          # dry-run
+.venv/bin/python scripts/reset_seiko_demo.py --apply
+.venv/bin/python scripts/build_seiko_handoff.py
 ```
 
-Browser checks against local `http://localhost:3000`: curated store grid (Bounty, Coca-Cola, Crest, Head & Shoulders, Tide) with matching illustrations; Coca-Cola PDP add-to-cart; preparation page showing empty title → Coca-Cola and replay evidence; cart with server price USD 5.99.
+Handoff zip: `artifacts/shelfready-seiko-image-handoff.zip`
 
-## Still unverified
+The bundle contains six downloaded originals, six optimized derivatives, the contact sheet,
+registry, JSON/CSV manifests, usage notes, and setup instructions. `unzip -t` reports no errors.
 
-- Live Bedrock structured output (no AWS credentials in this environment).
-- Live UPCitemdb (no API key exercised).
-- Hosted `https://shelfready.svgfy.com/store` still serves previously published data until that environment is redeployed.
+## Verification (2026-09-14)
 
-## Demo sequence (replay)
+- `cd services/api && .venv/bin/pytest -q` — 52 passed.
+- `cd apps/web && npx tsc --noEmit && npm run build` — passed.
+- `cd apps/web && PLAYWRIGHT_BASE_URL=http://localhost:3001 npx playwright test` — desktop
+  Chrome and Pixel 7 projects passed. The flow checks the SRPD55 route, exact fixture price and
+  stock, decoded product image, cart add feedback, quantity/totals, removal, empty state, and the
+  public preparation-evidence page.
+- `cd services/api && .venv/bin/python scripts/reset_seiko_demo.py --apply` — imported a fresh
+  five-row batch; three eligible products published and all three passed adapter verification.
+  The ambiguous-reference and wrong-variant scenarios were not featured.
+- Public `GET /api/store/cart` is covered explicitly; it no longer falls through to the protected
+  operator-cart route.
 
-1. Open `/store` — five household listings, category-matching demonstration images, no CONFLICT rows.
-2. Open Coca-Cola → **See how this listing was prepared**: original empty title/brand, accepted corrections, replay barcode evidence.
-3. **Add to cart** → cart count updates; `/store/cart` shows server price and stock.
-4. Operator `/workspace` → **Try demo catalog** for conflicts and missing price; **Show dev batches** for the stress-test CSV.
+The first sandboxed test/build attempt could not reach local PostgreSQL or Google Fonts. Both were
+rerun with the required local/network access and passed; those sandbox failures were environmental,
+not counted as successful verification.
+
+## Live blockers
+
+- Live Bedrock structured output: requires AWS credentials / Bedrock. Not exercised if absent.
+- Live manufacturer HTTP: used to download images for the bundle; runtime uses replay when `LOOKUP_PROVIDER=replay`.
+- Manufacturer-hosted image publication rights were not independently established. The assets are
+  labeled `demo_storefront_only`; they must not be represented as generally cleared commercial media.

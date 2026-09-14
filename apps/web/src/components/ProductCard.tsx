@@ -13,7 +13,7 @@ export function ProductCard({ product, priority = false }: { product: StoreProdu
           <img
             src={api.mediaUrl(product.primary_image_path)}
             alt={product.images.find((img) => img.is_primary)?.alt || product.title}
-            className="aspect-square w-full object-cover"
+            className="aspect-square w-full bg-bg object-contain"
             loading={priority ? "eager" : "lazy"}
           />
         ) : (
