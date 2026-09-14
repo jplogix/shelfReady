@@ -52,7 +52,7 @@ export default function HomePage() {
         <div className="flex flex-wrap gap-3 pt-2">
           <Link
             href="/store"
-            className="inline-flex min-h-11 items-center rounded bg-charcoal px-4 text-sm font-medium text-bg-elevated"
+            className="inline-flex min-h-11 items-center rounded border border-green bg-green px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-charcoal"
           >
             Browse published products
           </Link>

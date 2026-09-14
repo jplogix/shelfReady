@@ -21,6 +21,7 @@ from app.api.schemas import (
     ColumnMapping,
     DecisionOut,
     DecisionResolve,
+    DemoFixResult,
     FieldEvidenceOut,
     JobOut,
     ModeResponse,
@@ -346,6 +347,30 @@ def start_process(batch_id: uuid.UUID, db: Session = Depends(get_db)) -> Job:
     return job
 
 
+@router.post("/batches/{batch_id}/apply-recommended-demo-fixes", response_model=DemoFixResult)
+def apply_recommended_demo_fixes(
+    batch_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> DemoFixResult:
+    """Apply the curated safe choices while preserving the Seiko demo's review cases."""
+    batch = db.get(Batch, batch_id)
+    if not batch:
+        raise HTTPException(404, "Batch not found")
+    if batch.batch_kind != BatchKind.demo or batch.source_filename != "seiko_demo_catalog.csv":
+        raise HTTPException(400, "Recommended fixes are only available for the Seiko demonstration")
+    pending = db.scalar(
+        select(func.count())
+        .select_from(Decision)
+        .where(Decision.batch_id == batch.id, Decision.status == DecisionStatus.pending)
+    ) or 0
+    if not pending:
+        raise HTTPException(409, "Prepare the products before applying recommended fixes")
+
+    from app.services.bootstrap_storefront import apply_recommended_demo_decisions
+
+    return DemoFixResult(**apply_recommended_demo_decisions(db, batch.id))
+
+
 @router.post("/batches/{batch_id}/publish", response_model=JobOut)
 def start_publish(
     batch_id: uuid.UUID,
@@ -418,7 +443,6 @@ def get_product(product_id: uuid.UUID, db: Session = Depends(get_db)) -> Product
         diffs=version.diffs if version else [],
         blockers=version.blockers if version else [],
         provenance=version.provenance if version else {},
-        is_publishable=version.is_publishable if version else False,
         import_row_number=row.row_number if row else None,
         images=[
             {

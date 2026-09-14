@@ -86,7 +86,7 @@ export default function WorkspacePage() {
             type="button"
             onClick={loadSeiko}
             disabled={!!busy}
-            className="min-h-11 rounded bg-charcoal px-4 text-sm font-medium text-bg-elevated disabled:opacity-60"
+            className="min-h-11 rounded border border-green bg-green px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-charcoal disabled:opacity-60"
           >
             {busy === "seiko" ? "Loading…" : "Try Seiko demonstration"}
           </button>

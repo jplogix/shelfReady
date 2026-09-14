@@ -56,6 +56,15 @@ class BatchOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DemoFixResult(BaseModel):
+    resolved: int
+    approved: int
+    edited: int
+    remaining: int
+    remaining_products: int
+    ready_to_publish: int
+
+
 class PublishRequest(BaseModel):
     product_ids: list[uuid.UUID] = Field(default_factory=list)
     verify: bool = True

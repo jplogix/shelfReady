@@ -22,6 +22,7 @@ from app.db.models import (
     StoreProduct,
 )
 from app.policy.readiness import compute_product_readiness, next_action_for_product, refresh_product_readiness
+from app.services.csv_import import apply_mapping
 
 
 def recompute_batch_counts(db: Session, batch: Batch) -> dict[str, Any]:
@@ -105,6 +106,11 @@ def product_list_item(db: Session, product: Product) -> dict[str, Any]:
         db.get(ProductVersion, product.current_version_id) if product.current_version_id else None
     )
     proposed = version.proposed if version else {}
+    supplier = {}
+    if not version:
+        row = db.scalar(select(ImportRow).where(ImportRow.product_id == product.id).limit(1))
+        if row:
+            supplier = apply_mapping(row.raw, product.batch.column_mapping or {})
     thumb = None
     if product.images:
         primary = next((i for i in product.images if i.is_primary), product.images[0])
@@ -119,9 +125,9 @@ def product_list_item(db: Session, product: Product) -> dict[str, Any]:
         "id": product.id,
         "sku": product.sku,
         "supplier_sku": product.supplier_sku or product.sku.split("__row")[0],
-        "title": proposed.get("title") or product.sku,
-        "price": proposed.get("price"),
-        "currency": proposed.get("currency") or "USD",
+        "title": proposed.get("title") or supplier.get("title") or product.sku,
+        "price": proposed.get("price") or supplier.get("price"),
+        "currency": proposed.get("currency") or supplier.get("currency") or "USD",
         "status": product.status.value,
         "readiness": readiness.value if readiness else None,
         "verification_passed": product.verification_passed,

@@ -103,7 +103,7 @@ def _bootstrap(db: Session) -> None:
     if process_job:
         execute_job(db, str(process_job.id))
 
-    _accept_safe_decisions(db, batch.id)
+    apply_recommended_demo_decisions(db, batch.id)
 
     for product in db.scalars(select(Product).where(Product.batch_id == batch.id)).all():
         refresh_product_readiness(db, product)
@@ -136,8 +136,10 @@ def _run_job(db: Session, starter, batch_id: uuid.UUID) -> Job | None:
         return None
 
 
-def _accept_safe_decisions(db: Session, batch_id: uuid.UUID) -> None:
+def apply_recommended_demo_decisions(db: Session, batch_id: uuid.UUID) -> dict[str, int]:
+    """Apply only the evidence-backed, non-ambiguous choices in a demo batch."""
     from app.api.routes import resolve_decision
+    from app.services.batch_metrics import recompute_batch_counts
 
     def pending_for_batch() -> list[Decision]:
         return list(
@@ -148,6 +150,8 @@ def _accept_safe_decisions(db: Session, batch_id: uuid.UUID) -> None:
                 )
             ).all()
         )
+
+    before = pending_for_batch()
 
     # First consume retrieved evidence, then accept supplier labels already on the row.
     for decision in pending_for_batch():
@@ -189,6 +193,25 @@ def _accept_safe_decisions(db: Session, batch_id: uuid.UUID) -> None:
         except Exception:
             logger.exception("Could not accept supplier label for demo decision %s", decision.id)
             db.rollback()
+
+    remaining = pending_for_batch()
+    batch = db.get(Batch, batch_id)
+    counts = recompute_batch_counts(db, batch) if batch else {}
+    db.commit()
+    resolved_rows = [decision for decision in before if decision.status != DecisionStatus.pending]
+    return {
+        "resolved": len(resolved_rows),
+        "approved": sum(1 for decision in resolved_rows if decision.status == DecisionStatus.approved),
+        "edited": sum(1 for decision in resolved_rows if decision.status == DecisionStatus.edited),
+        "remaining": len(remaining),
+        "remaining_products": len({decision.product_id for decision in remaining if decision.product_id}),
+        "ready_to_publish": int(counts.get("ready_to_publish", 0)),
+    }
+
+
+def _accept_safe_decisions(db: Session, batch_id: uuid.UUID) -> None:
+    """Backward-compatible helper for scripts and existing tests."""
+    apply_recommended_demo_decisions(db, batch_id)
 
 
 def _approve(db: Session, decision: Decision) -> None:

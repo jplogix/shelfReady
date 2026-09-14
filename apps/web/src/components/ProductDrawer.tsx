@@ -141,12 +141,14 @@ export function ProductDrawer({
   product,
   onClose,
   onRefresh,
+  initialTab = "supplier",
 }: {
   product: ProductDetail;
   onClose: () => void;
   onRefresh: () => void;
+  initialTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>("supplier");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [showDev, setShowDev] = useState(false);
 
   const tabs: { id: Tab; label: string }[] = [

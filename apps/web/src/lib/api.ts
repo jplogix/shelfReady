@@ -159,6 +159,15 @@ export type Job = {
   created_at: string;
 };
 
+export type DemoFixResult = {
+  resolved: number;
+  approved: number;
+  edited: number;
+  remaining: number;
+  remaining_products: number;
+  ready_to_publish: number;
+};
+
 export type AgentAction = {
   id: string;
   tool_name: string;
@@ -280,6 +289,8 @@ export const api = {
   unlock: (token: string) =>
     request<{ authenticated: boolean }>("/api/session", { method: "POST", body: JSON.stringify({ token }) }),
   process: (id: string) => request<Job>(`/api/batches/${id}/process`, { method: "POST" }),
+  applyRecommendedDemoFixes: (id: string) =>
+    request<DemoFixResult>(`/api/batches/${id}/apply-recommended-demo-fixes`, { method: "POST" }),
   publish: (id: string, productIds: string[]) =>
     request<Job>(`/api/batches/${id}/publish`, {
       method: "POST",

@@ -45,7 +45,7 @@ export function BatchHeader({ batch, mode, primaryAction, secondaryActions }: Pr
             type="button"
             onClick={primaryAction.onClick}
             disabled={primaryAction.disabled}
-            className="rounded bg-charcoal px-4 py-2.5 text-sm font-medium text-bg-elevated disabled:opacity-50"
+            className="rounded border border-green bg-green px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-charcoal disabled:opacity-50"
           >
             {primaryAction.label}
           </button>
