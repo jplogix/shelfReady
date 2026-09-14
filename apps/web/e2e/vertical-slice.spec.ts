@@ -17,11 +17,12 @@ async function waitForJob(jobId: string) {
 
 test.describe("ShelfReady vertical slice", () => {
   test("sample → process → decisions → publish → cart → no duplicate", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/workspace");
     await expect(page.getByText("ShelfReady").first()).toBeVisible();
-    await expect(page.getByText(/replay mode|live agent mode/i).first()).toBeVisible();
+    await expect(page.getByText(/replay|live agent/i).first()).toBeVisible();
 
-    await page.getByRole("button", { name: /Load sample supplier batch/i }).click();
+    await page.getByRole("button", { name: /Show dev batches/i }).click();
+    await page.getByRole("button", { name: /Load stress-test catalog/i }).click();
     await page.waitForURL(/\/batches\//);
     const batchUrl = page.url();
     const batchId = batchUrl.split("/batches/")[1].split(/[?#]/)[0];
@@ -98,12 +99,11 @@ test.describe("ShelfReady vertical slice", () => {
     const after = await (await fetch(`${API}/api/store/products`, {
       headers: { Authorization: `Bearer ${TOKEN}` },
     })).json();
-    const extBefore = new Set(before.map((p: { external_id: string }) => p.external_id));
-    const extAfter = after.map((p: { external_id: string }) => p.external_id);
-    expect(new Set(extAfter).size).toBe(extAfter.length);
-    // Should not create duplicate external ids
-    for (const id of extBefore) {
-      expect(extAfter.filter((x: string) => x === id).length).toBeLessThanOrEqual(1);
+    const slugsBefore = new Set(before.map((p: { slug: string }) => p.slug));
+    const slugsAfter = after.map((p: { slug: string }) => p.slug);
+    expect(new Set(slugsAfter).size).toBe(slugsAfter.length);
+    for (const id of slugsBefore) {
+      expect(slugsAfter.filter((x: string) => x === id).length).toBeLessThanOrEqual(1);
     }
   });
 });

@@ -55,6 +55,10 @@ def seed() -> None:
     finally:
         db.close()
 
+    from app.services.bootstrap_storefront import ensure_public_storefront
+
+    ensure_public_storefront()
+
 
 if __name__ == "__main__":
     seed()

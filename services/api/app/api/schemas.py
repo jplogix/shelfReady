@@ -180,7 +180,15 @@ class AgentActionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class StoreImageOut(BaseModel):
+    path: str
+    alt: Optional[str] = None
+    is_primary: bool = False
+
+
 class StoreProductOut(BaseModel):
+    """Approved storefront fields only — no operator or unpublished data."""
+
     id: uuid.UUID
     slug: str
     title: str
@@ -191,13 +199,47 @@ class StoreProductOut(BaseModel):
     stock: int
     available: bool
     primary_image_path: Optional[str]
-    images: list[Any]
-    seo: dict[str, Any]
-    json_ld: dict[str, Any]
-    variant_sku: str
-    external_id: str
+    images: list[StoreImageOut]
+    sku: str
 
     model_config = {"from_attributes": True}
+
+
+class ListingCorrectionOut(BaseModel):
+    field: str
+    original: Any = None
+    accepted: Any = None
+
+
+class ListingEvidenceOut(BaseModel):
+    field_name: str
+    original_supplier_value: Any = None
+    proposed_value: Any = None
+    source_provider: str
+    source_url: Optional[str] = None
+    match_outcome: str
+    match_explanation: str
+    is_replay: bool = False
+
+
+class ListingAssessmentOut(BaseModel):
+    match_outcome: str
+    explanation: str
+    recommended_action: Optional[str] = None
+    agreements: list[dict[str, Any]] = Field(default_factory=list)
+    conflicts: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ListingProvenanceOut(BaseModel):
+    slug: str
+    title: str
+    preparation_label: str
+    agent_mode: str
+    lookup_mode: str
+    original_row: dict[str, Any]
+    corrections: list[ListingCorrectionOut]
+    evidence: list[ListingEvidenceOut]
+    assessment: Optional[ListingAssessmentOut] = None
 
 
 class CartItemOut(BaseModel):

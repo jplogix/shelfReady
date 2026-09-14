@@ -28,7 +28,7 @@ docs              Architecture, demo script, limitations, AgentCore guide
 
 **Never** silently falls back from a failed live model call into replay mode. Live failures mark the job `failed`.
 
-Operator writes go through the Next.js same-origin BFF. The API token is server-only (`API_TOKEN` / `SHELFREADY_API_TOKEN`). Do not set `NEXT_PUBLIC_API_TOKEN`. Storefront product reads are public. Production API/worker require `ENVIRONMENT=production` and a non-localhost `DATABASE_URL`.
+Operator writes go through the Next.js same-origin BFF. The API token is server-only (`API_TOKEN` / `SHELFREADY_API_TOKEN`). Do not set `NEXT_PUBLIC_API_TOKEN`. Published storefront reads, media, and listing provenance are public. Import, editing, and publication require operator access. Production API/worker require `ENVIRONMENT=production` and a non-localhost `DATABASE_URL`.
 
 ## Prerequisites
 
@@ -82,7 +82,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000 — use **Load sample supplier batch**, run processing, resolve decisions, publish, then open the demo store.
+Open http://localhost:3000 to browse the public demo store. Operator import and publishing live at `/workspace`. Seed publishes a small demonstration catalog when the store is empty.
 
 ## Live mode (Bedrock)
 

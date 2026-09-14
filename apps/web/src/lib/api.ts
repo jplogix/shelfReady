@@ -8,6 +8,34 @@ export class ApiError extends Error {
   }
 }
 
+export function isAccessError(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 401 || error.status === 403);
+}
+
+export function friendlyErrorMessage(status: number, body: string): string {
+  if (status === 401 || status === 403) {
+    return "Operator access is required for this page.";
+  }
+  if (!body) {
+    return status === 404 ? "Not found." : `Request failed (${status}).`;
+  }
+  try {
+    const parsed = JSON.parse(body) as { error?: string; detail?: string; message?: string };
+    if (parsed.error === "operator_session_required") {
+      return "Operator access is required for this page.";
+    }
+    if (parsed.error === "upstream_unavailable") {
+      return parsed.detail || "The catalog service is temporarily unavailable.";
+    }
+    if (typeof parsed.detail === "string") return parsed.detail;
+    if (typeof parsed.message === "string") return parsed.message;
+  } catch {
+    if (!body.trim().startsWith("{") && !body.trim().startsWith("<")) return body;
+  }
+  if (status === 404) return "Not found.";
+  return `Request failed (${status}).`;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData)) {
@@ -16,7 +44,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { ...init, headers, cache: "no-store", credentials: "same-origin" });
   if (!res.ok) {
     const text = await res.text();
-    throw new ApiError(res.status, text || res.statusText);
+    throw new ApiError(res.status, friendlyErrorMessage(res.status, text));
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -148,10 +176,34 @@ export type StoreProduct = {
   available: boolean;
   primary_image_path?: string | null;
   images: Array<{ path: string; alt?: string; is_primary?: boolean }>;
-  seo: Record<string, unknown>;
-  json_ld: Record<string, unknown>;
-  variant_sku: string;
-  external_id: string;
+  sku: string;
+};
+
+export type ListingProvenance = {
+  slug: string;
+  title: string;
+  preparation_label: string;
+  agent_mode: string;
+  lookup_mode: string;
+  original_row: Record<string, unknown>;
+  corrections: Array<{ field: string; original?: unknown; accepted?: unknown }>;
+  evidence: Array<{
+    field_name: string;
+    original_supplier_value?: unknown;
+    proposed_value?: unknown;
+    source_provider: string;
+    source_url?: string | null;
+    match_outcome: string;
+    match_explanation: string;
+    is_replay: boolean;
+  }>;
+  assessment?: {
+    match_outcome: string;
+    explanation: string;
+    recommended_action?: string | null;
+    agreements: Array<Record<string, unknown>>;
+    conflicts: Array<Record<string, unknown>>;
+  } | null;
 };
 
 export const api = {
@@ -211,6 +263,8 @@ export const api = {
   actions: (jobId: string) => request<AgentAction[]>(`/api/jobs/${jobId}/actions`),
   storeProducts: () => request<StoreProduct[]>("/api/store/products"),
   storeProduct: (slug: string) => request<StoreProduct>(`/api/store/products/${slug}`),
+  listingProvenance: (slug: string) =>
+    request<ListingProvenance>(`/api/store/products/${slug}/provenance`),
   cart: () =>
     request<{
       id: string;

@@ -27,6 +27,7 @@ from app.api.schemas import (
     ProductDetail,
     ProductOut,
     PublishRequest,
+    ListingProvenanceOut,
     StartProcessRequest,
     StoreProductOut,
     WorkspaceOut,
@@ -60,6 +61,7 @@ from app.db.models import (
 from app.db.session import get_db
 from app.policy.readiness import refresh_product_readiness
 from app.services.batch_metrics import product_list_item, recompute_batch_counts
+from app.services.public_store import listing_provenance, to_public_store_product
 from app.services.csv_import import (
     apply_mapping,
     parse_csv_bytes,
@@ -659,17 +661,26 @@ def list_actions(job_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Agent
 
 @public_router.get("/store/products", response_model=list[StoreProductOut])
 @router.get("/store/products", response_model=list[StoreProductOut])
-def store_list(db: Session = Depends(get_db)) -> list[StoreProduct]:
-    return list(db.scalars(select(StoreProduct).order_by(StoreProduct.title)).all())
+def store_list(db: Session = Depends(get_db)) -> list[StoreProductOut]:
+    rows = list(db.scalars(select(StoreProduct).order_by(StoreProduct.title)).all())
+    return [to_public_store_product(sp) for sp in rows]
 
 
 @public_router.get("/store/products/{slug}", response_model=StoreProductOut)
 @router.get("/store/products/{slug}", response_model=StoreProductOut)
-def store_get(slug: str, db: Session = Depends(get_db)) -> StoreProduct:
+def store_get(slug: str, db: Session = Depends(get_db)) -> StoreProductOut:
     sp = db.scalar(select(StoreProduct).where(StoreProduct.slug == slug))
     if not sp:
         raise HTTPException(404, "Not found")
-    return sp
+    return to_public_store_product(sp)
+
+
+@public_router.get("/store/products/{slug}/provenance", response_model=ListingProvenanceOut)
+def store_provenance(slug: str, db: Session = Depends(get_db)) -> ListingProvenanceOut:
+    sp = db.scalar(select(StoreProduct).where(StoreProduct.slug == slug))
+    if not sp:
+        raise HTTPException(404, "Not found")
+    return listing_provenance(db, sp)
 
 
 @router.post("/store/cart/items", response_model=CartOut)
@@ -740,25 +751,30 @@ def _cart_out(db: Session, cart: Cart) -> CartOut:
     return CartOut(id=cart.id, purpose=cart.purpose, items=items)
 
 
-@router.post("/demo/load-sample", response_model=BatchOut)
-def load_sample_batch(db: Session = Depends(get_db)) -> Batch:
-    """Load the bundled synthetic supplier CSV into a new batch and import products."""
+def import_fixture_batch(
+    db: Session,
+    *,
+    csv_name: str,
+    batch_name: str,
+    supplier_name: str,
+    batch_kind: BatchKind,
+) -> Batch:
     settings = get_settings()
     fixtures = Path(settings.fixtures_root)
     if not fixtures.is_absolute():
         alt = Path(__file__).resolve().parents[4] / "fixtures"
         fixtures = alt if alt.exists() else Path.cwd() / fixtures
-    csv_path = fixtures / "supplier_catalog.csv"
+    csv_path = fixtures / csv_name
     if not csv_path.exists():
         raise HTTPException(500, f"Fixture CSV missing at {csv_path}")
     ws = get_workspace(db)
     batch = Batch(
         id=uuid.uuid4(),
         workspace_id=ws.id,
-        name=f"Stress-test catalog · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC",
-        supplier_name="Northwind Synthetic Supply",
+        name=batch_name,
+        supplier_name=supplier_name,
         status=BatchStatus.draft,
-        batch_kind=BatchKind.stress_test,
+        batch_kind=batch_kind,
         counts={},
     )
     db.add(batch)
@@ -767,42 +783,32 @@ def load_sample_batch(db: Session = Depends(get_db)) -> Batch:
     headers, rows = parse_csv_bytes(data)
     mapping = suggest_column_mapping(headers)
     batch.column_mapping = mapping
-    batch.source_filename = "supplier_catalog.csv"
+    batch.source_filename = csv_name
     for i, raw in enumerate(rows, start=1):
         db.add(ImportRow(id=uuid.uuid4(), batch_id=batch.id, row_number=i, raw=raw))
     db.commit()
     return commit_import(batch.id, StartProcessRequest(column_mapping=mapping), db)
+
+
+@router.post("/demo/load-sample", response_model=BatchOut)
+def load_sample_batch(db: Session = Depends(get_db)) -> Batch:
+    """Load the bundled synthetic supplier CSV into a new batch and import products."""
+    return import_fixture_batch(
+        db,
+        csv_name="supplier_catalog.csv",
+        batch_name=f"Stress-test catalog · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC",
+        supplier_name="Northwind Synthetic Supply",
+        batch_kind=BatchKind.stress_test,
+    )
 
 
 @router.post("/demo/load-demo", response_model=BatchOut)
 def load_demo_batch(db: Session = Depends(get_db)) -> Batch:
     """Load the demonstration catalog with real barcodes and labeled scenarios."""
-    settings = get_settings()
-    fixtures = Path(settings.fixtures_root)
-    if not fixtures.is_absolute():
-        alt = Path(__file__).resolve().parents[4] / "fixtures"
-        fixtures = alt if alt.exists() else Path.cwd() / fixtures
-    csv_path = fixtures / "demo_catalog.csv"
-    if not csv_path.exists():
-        raise HTTPException(500, f"Demo CSV missing at {csv_path}")
-    ws = get_workspace(db)
-    batch = Batch(
-        id=uuid.uuid4(),
-        workspace_id=ws.id,
-        name=f"Demo catalog · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC",
+    return import_fixture_batch(
+        db,
+        csv_name="demo_catalog.csv",
+        batch_name=f"Demo catalog · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC",
         supplier_name="Household Essentials Co.",
-        status=BatchStatus.draft,
         batch_kind=BatchKind.demo,
-        counts={},
     )
-    db.add(batch)
-    db.commit()
-    data = csv_path.read_bytes()
-    headers, rows = parse_csv_bytes(data)
-    mapping = suggest_column_mapping(headers)
-    batch.column_mapping = mapping
-    batch.source_filename = "demo_catalog.csv"
-    for i, raw in enumerate(rows, start=1):
-        db.add(ImportRow(id=uuid.uuid4(), batch_id=batch.id, row_number=i, raw=raw))
-    db.commit()
-    return commit_import(batch.id, StartProcessRequest(column_mapping=mapping), db)

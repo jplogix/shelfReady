@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ErrorState } from "@/components/RequestState";
 import { api } from "@/lib/api";
 
 export default function ImportPage() {
@@ -47,11 +48,7 @@ export default function ImportPage() {
         <p className="text-ink-muted">Upload CSV, map columns, preview rows, then begin processing.</p>
       </div>
 
-      {error && (
-        <div className="rounded border border-red/30 bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-          {error}
-        </div>
-      )}
+      {error && <ErrorState message={error} />}
 
       {step === "upload" && (
         <div className="space-y-4 rounded border border-line bg-bg-elevated p-4">

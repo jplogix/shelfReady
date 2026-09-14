@@ -40,6 +40,7 @@ services:
       BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-global.anthropic.claude-sonnet-4-6}
       UPCITEMDB_API_KEY: ${UPCITEMDB_API_KEY:-}
       LOOKUP_BUDGET_PER_RUN: ${LOOKUP_BUDGET_PER_RUN:-25}
+      BOOTSTRAP_STOREFRONT: "1"
     volumes:
       - shelfready_storage:/app/storage
     expose:
@@ -75,6 +76,7 @@ services:
       BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-global.anthropic.claude-sonnet-4-6}
       UPCITEMDB_API_KEY: ${UPCITEMDB_API_KEY:-}
       LOOKUP_BUDGET_PER_RUN: ${LOOKUP_BUDGET_PER_RUN:-25}
+      BOOTSTRAP_STOREFRONT: "0"
     volumes:
       - shelfready_storage:/app/storage
     networks:

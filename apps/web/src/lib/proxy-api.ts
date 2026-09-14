@@ -41,7 +41,15 @@ export async function proxyToApi(req: NextRequest, path: string): Promise<NextRe
     init.body = await req.arrayBuffer();
   }
 
-  const res = await fetch(target, init);
+  let res: Response;
+  try {
+    res = await fetch(target, init);
+  } catch {
+    return NextResponse.json(
+      { error: "upstream_unavailable", detail: "The ShelfReady API could not be reached." },
+      { status: 502 },
+    );
+  }
   const responseHeaders = new Headers(res.headers);
   responseHeaders.delete("transfer-encoding");
   const out = new NextResponse(res.body, {

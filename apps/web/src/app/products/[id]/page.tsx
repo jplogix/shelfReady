@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ErrorState } from "@/components/RequestState";
 import { ProductDetail, api, statusColor } from "@/lib/api";
 
 export default function ProductPage() {
@@ -18,7 +19,7 @@ export default function ProductPage() {
       .catch((e) => setError(e instanceof Error ? e.message : "Failed"));
   }, [id]);
 
-  if (error) return <p className="text-red">{error}</p>;
+  if (error) return <ErrorState message={error} />;
   if (!product) return <p className="text-ink-muted">Loading product…</p>;
 
   return (

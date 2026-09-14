@@ -33,6 +33,18 @@ def test_storefront_list_is_public(client):
     r = client.get("/api/store/products")
     assert r.status_code == 200
     assert isinstance(r.json(), list)
+    if r.json():
+        item = r.json()[0]
+        assert "slug" in item
+        assert "title" in item
+        assert "external_id" not in item
+        assert "json_ld" not in item
+        assert "seo" not in item
+
+
+def test_listing_provenance_is_public_and_404_for_unknown(client):
+    r = client.get("/api/store/products/not-a-real-slug/provenance")
+    assert r.status_code == 404
 
 
 def test_operator_write_requires_token(client):

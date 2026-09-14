@@ -7,6 +7,7 @@ import { BatchHeader } from "@/components/BatchHeader";
 import { BatchSummary } from "@/components/BatchSummary";
 import { ProductDrawer } from "@/components/ProductDrawer";
 import { ProductTable } from "@/components/ProductTable";
+import { ErrorState } from "@/components/RequestState";
 import { api, Batch, Job, ModeInfo, Product, ProductDetail } from "@/lib/api";
 import { statusColor } from "@/lib/api";
 
@@ -133,12 +134,15 @@ export default function BatchPage() {
     return { label: "Run processing", onClick: runProcess, disabled: !!busy };
   }, [batch, busy, selected.size]);
 
-  if (!batch && !error) return <p className="text-ink-muted">Loading batch…</p>;
+  if (!batch && error) {
+    return <ErrorState message={error} onRetry={refresh} />;
+  }
+  if (!batch) return <p className="text-ink-muted">Loading batch…</p>;
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-8">
       <BatchHeader
-        batch={batch!}
+        batch={batch}
         mode={mode}
         primaryAction={primaryAction}
         secondaryActions={
@@ -150,11 +154,7 @@ export default function BatchPage() {
         }
       />
 
-      {error && (
-        <div className="rounded border border-red/30 bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-          {error}
-        </div>
-      )}
+      {error && <ErrorState message={error} onRetry={refresh} />}
 
       {batch && <BatchSummary batch={batch} />}
 

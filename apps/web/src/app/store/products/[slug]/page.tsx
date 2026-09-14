@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ErrorState } from "@/components/RequestState";
 import { StoreProduct, api } from "@/lib/api";
+import { addShopperItem } from "@/lib/shopper-cart";
 
 export default function StoreProductPage() {
   const params = useParams();
@@ -15,23 +17,38 @@ export default function StoreProductPage() {
   useEffect(() => {
     api
       .storeProduct(slug)
-      .then(setProduct)
-      .catch((e) => setError(e instanceof Error ? e.message : "Not found"));
+      .then((p) => {
+        setProduct(p);
+        setError(null);
+      })
+      .catch((e) => {
+        setProduct(null);
+        setError(e instanceof Error ? e.message : "This product could not be loaded.");
+      });
   }, [slug]);
 
-  async function add() {
+  function add() {
     if (!product) return;
-    try {
-      await api.addToCart(product.id);
-      setMessage("Added to cart");
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not add to cart");
+    if (!product.available) {
+      setError("This product is out of stock.");
+      return;
     }
+    addShopperItem({
+      store_product_id: product.id,
+      slug: product.slug,
+      title: product.title,
+      price: product.price,
+      currency: product.currency,
+      image: product.primary_image_path,
+    });
+    setMessage("Added to cart");
+    setError(null);
   }
 
-  if (error && !product) return <p className="text-red">{error}</p>;
-  if (!product) return <p className="text-ink-muted">Loading…</p>;
+  if (error && !product) {
+    return <ErrorState title="Product unavailable" message={error} />;
+  }
+  if (!product) return <p className="text-ink-muted">Loading product…</p>;
 
   return (
     <div className="grid gap-8 md:grid-cols-2">
@@ -40,7 +57,7 @@ export default function StoreProductPage() {
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={api.mediaUrl(product.primary_image_path)}
-            alt={String(product.seo?.image_alt || product.title)}
+            alt={product.title}
             className="aspect-square w-full rounded border border-line object-cover"
           />
         ) : (
@@ -52,16 +69,17 @@ export default function StoreProductPage() {
           {product.images?.map((img, i) => (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              key={i}
+              key={`${img.path}-${i}`}
               src={api.mediaUrl(img.path)}
               alt={img.alt || product.title}
               className="h-20 w-20 rounded border border-line object-cover"
+              loading="lazy"
             />
           ))}
         </ul>
       </div>
       <div className="space-y-4">
-        <p className="text-xs text-amber">noindex demo · not a live marketplace listing</p>
+        <p className="text-xs uppercase tracking-wide text-ink-muted">noindex demo · not a live marketplace listing</p>
         <p className="text-sm text-ink-muted">{product.brand}</p>
         <h1 className="text-3xl text-charcoal">{product.title}</h1>
         <p className="text-xl tabular-nums">
@@ -69,24 +87,29 @@ export default function StoreProductPage() {
         </p>
         <p className="text-sm">{product.available ? `In stock (${product.stock})` : "Out of stock"}</p>
         <p className="text-ink-muted">{product.description}</p>
-        <p className="text-sm">Variant SKU: {product.variant_sku}</p>
+        {product.sku && <p className="text-sm text-ink-muted">SKU {product.sku}</p>}
         <button
           type="button"
           onClick={add}
           disabled={!product.available}
-          className="rounded bg-charcoal px-4 py-2.5 text-sm text-bg-elevated disabled:opacity-40"
+          className="min-h-11 rounded bg-charcoal px-4 text-sm text-bg-elevated disabled:opacity-40"
         >
           Add to cart
         </button>
         {message && <p className="text-green">{message}</p>}
-        {error && <p className="text-red">{error}</p>}
-        <Link href="/store/cart" className="block text-sm underline">
-          View cart
-        </Link>
-        <details className="rounded border border-line bg-bg-elevated p-3 text-sm">
-          <summary>Structured data (JSON-LD) preview</summary>
-          <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(product.json_ld, null, 2)}</pre>
-        </details>
+        {error && product && (
+          <p className="text-sm text-red" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="flex flex-col gap-2 text-sm">
+          <Link href={`/store/products/${product.slug}/prepared`} className="font-medium underline">
+            See how this listing was prepared
+          </Link>
+          <Link href="/store/cart" className="underline">
+            View cart
+          </Link>
+        </div>
       </div>
     </div>
   );

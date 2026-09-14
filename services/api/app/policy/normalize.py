@@ -16,6 +16,14 @@ SEED_BRAND_ALIASES: dict[str, str] = {
     "northwind": "Northwind",
     "AURORA SUPPLY": "Aurora",
     "Aurora Goods": "Aurora",
+    "Tide": "Tide",
+    "Coca-Cola": "Coca-Cola",
+    "Crest": "Crest",
+    "Bounty": "Bounty",
+    "Head & Shoulders": "Head & Shoulders",
+    "CleanCo": "CleanCo",
+    "Old Spice": "Old Spice",
+    "Demo Co": "Demo Co",
 }
 
 SEED_COLOR_ALIASES: dict[str, list[str]] = {
@@ -27,6 +35,10 @@ SEED_COLOR_ALIASES: dict[str, list[str]] = {
     "NVY": ["Navy"],
     "Navy Blue": ["Navy"],
     "WHT": ["White"],
+    "White": ["White"],
+    "Blue": ["Blue"],
+    "Green": ["Green"],
+    "Red": ["Red"],
 }
 
 SEED_CATEGORY_ALIASES: dict[str, str] = {
@@ -36,6 +48,9 @@ SEED_CATEGORY_ALIASES: dict[str, str] = {
     "bag": "Bags",
     "apparel": "Apparel",
     "Home Goods": "Home",
+    "Beverages": "Beverages",
+    "Personal Care": "Personal Care",
+    "Household": "Household",
 }
 
 SEED_TYPE_ALIASES: dict[str, str] = {

@@ -101,8 +101,6 @@ def apply_mapping(raw: dict[str, str], mapping: dict[str, str | None]) -> dict[s
 def validate_mapped_row(mapped: dict[str, Any], row_number: int) -> tuple[bool, str | None]:
     if not mapped.get("sku"):
         return False, f"Row {row_number}: missing SKU"
-    if not mapped.get("title"):
-        return False, f"Row {row_number}: missing title"
     return True, None
 
 

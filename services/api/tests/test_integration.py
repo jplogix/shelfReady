@@ -199,6 +199,14 @@ def test_end_to_end_sample_process_decisions_publish(client):
 
     if products:
         sp = products[0]
+        assert "external_id" not in sp
+        prov = client.get(f"/api/store/products/{sp['slug']}/provenance")
+        assert prov.status_code == 200, prov.text
+        body = prov.json()
+        assert body["slug"] == sp["slug"]
+        assert "original_row" in body
+        assert "corrections" in body
+        assert "evidence" in body
         # Idempotent republish
         before = len(products)
         r = client.post(f"/api/batches/{batch_id}/publish", headers=AUTH)
@@ -211,8 +219,8 @@ def test_end_to_end_sample_process_decisions_publish(client):
         r = client.get("/api/store/products", headers=AUTH)
         after = r.json()
         # external_id uniqueness — count should not explode with duplicates of same SKUs
-        ext = [p["external_id"] for p in after]
-        assert len(ext) == len(set(ext))
+        slugs = [p["slug"] for p in after]
+        assert len(slugs) == len(set(slugs))
 
         if sp["available"]:
             r = client.post(
