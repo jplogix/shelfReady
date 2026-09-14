@@ -10,10 +10,8 @@ COPY apps/web/ .
 
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ARG NEXT_PUBLIC_API_TOKEN=dev-token-change-me
-ARG INTERNAL_API_URL=http://api:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_TOKEN=$NEXT_PUBLIC_API_TOKEN
-ENV INTERNAL_API_URL=$INTERNAL_API_URL
 
 RUN npm run build
 
@@ -22,7 +20,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production \
     PORT=3000 \
-    HOSTNAME=0.0.0.0
+    HOSTNAME=0.0.0.0 \
+    INTERNAL_API_URL=http://api:8000
 
 RUN addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 nextjs

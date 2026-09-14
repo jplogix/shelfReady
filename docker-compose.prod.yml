@@ -13,6 +13,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - shelfready
 
   api:
     build:
@@ -41,6 +43,10 @@ services:
       - shelfready_storage:/app/storage
     expose:
       - "8000"
+    networks:
+      shelfready:
+        aliases:
+          - api
 
   worker:
     build:
@@ -69,6 +75,8 @@ services:
       LOOKUP_BUDGET_PER_RUN: ${LOOKUP_BUDGET_PER_RUN:-25}
     volumes:
       - shelfready_storage:/app/storage
+    networks:
+      - shelfready
 
   web:
     build:
@@ -77,14 +85,25 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
         NEXT_PUBLIC_API_TOKEN: ${NEXT_PUBLIC_API_TOKEN:-dev-token-change-me}
-        INTERNAL_API_URL: http://api:8000
     restart: unless-stopped
     depends_on:
       api:
         condition: service_started
+    environment:
+      INTERNAL_API_URL: http://api:8000
     expose:
       - "3000"
+    networks:
+      - shelfready
+      - dokploy
 
 volumes:
   shelfready_pgdata:
   shelfready_storage:
+
+networks:
+  shelfready:
+    driver: bridge
+  dokploy:
+    external: true
+    name: dokploy-network
