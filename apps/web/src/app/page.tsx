@@ -53,6 +53,7 @@ export default function HomePage() {
           <Link
             href="/store"
             className="inline-flex min-h-11 items-center rounded border border-green bg-green px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-charcoal"
+            style={{ color: "#ffffff" }}
           >
             Browse published products
           </Link>
